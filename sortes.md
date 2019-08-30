@@ -4,6 +4,8 @@ Don't actually do this.
 
 <div id="sortes"></div>
 
+<a href="https://api.biblia.com/v1/bible/content/ESV.html?passage=John3.16&key=b74dfab83a3e06f0f01850c93466c29d">Does this work??</a>
+
 <script>
 var api_key = "b74dfab83a3e06f0f01850c93466c29d"
 var url = "https://api.biblia.com/v1/bible/content/ESV.html?passage=John3.16&key=" + api_key
