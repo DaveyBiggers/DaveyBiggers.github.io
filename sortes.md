@@ -7,7 +7,8 @@ Don't actually do this.
 <script>
 var api_key = "b74dfab83a3e06f0f01850c93466c29d"
 var url = "https://api.biblia.com/v1/bible/content/ESV.html?passage=John3.16&key=" + api_key
-xhttp_nodes.onreadystatechange = function() {
+var xhttp = new XMLHttpRequest();
+xhttp.onreadystatechange = function() {
     if (this.readyState == 4 && this.status == 200) {
         response = JSON.parse(this.responseText)
         console.log(this.responseText)
@@ -15,7 +16,7 @@ xhttp_nodes.onreadystatechange = function() {
         document.getElementById("sortes").innerHTML = this.responseText
     }
 }
-xhttp_nodes.open("GET", url, true);
-xhttp_nodes.send();
+xhttp.open("GET", url, true);
+xhttp.send();
 
 </script>
