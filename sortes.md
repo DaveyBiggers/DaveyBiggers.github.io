@@ -43,6 +43,13 @@ $("#generate").click(function(){
         })
     */
     random_verse = Math.floor(Math.random() * (+total_verses - +1)) + +1;
+    current_verse_total = 0
+    current_chapter = 0
+    while (random_verse < current_verse_total + chapter_details[current_chapter].verses) {
+        current_verse_total += chapter_details[current_chapter].verses
+        current_chapter += 1
+    }
     console.log(random_verse)
+    console.log(chapter_details[current_chapter].name, random_verse - current_verse_total)
 });
 </script>
