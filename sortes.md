@@ -9,6 +9,7 @@ Don't actually do this.
 
 <a href="https://api.biblia.com/v1/bible/content/kjv.html?passage=John3.16&key=b74dfab83a3e06f0f01850c93466c29d">Does this work??</a>
 
+<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
 <script>
 var api_key = "b74dfab83a3e06f0f01850c93466c29d"
 var url = "https://api.biblia.com/v1/bible/content/kjv.txt?passage=John3.16&key=" + api_key
