@@ -44,7 +44,7 @@ $().ready(function(){
 })
 
 $("#get_question").click(function(){
-    url = "api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=interpersonal"
+    url = "https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=interpersonal"
     fetch(url)
         .then(function(data) {
             console.log("SE getting...")
