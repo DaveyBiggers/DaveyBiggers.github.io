@@ -25,23 +25,6 @@ $().ready(function(){
 })
 
 $("#generate").click(function(){
-    chapter = Math.floor(Math.random() * (+4 - +1)) + +1;
-    verse = Math.floor(Math.random() * (+10 - +1)) + +1;
-    var url = "https://api.biblia.com/v1/bible/content/kjv.html?passage=John" + chapter + "." + verse + "&key=" + api_key
-    /*
-    fetch(url)
-        .then(function(data) {
-            console.log("Hi...")
-            return data.text();
-        })
-        .then(function(text) {
-            $("#verse").html(text)
-            console.log(text)
-        })
-        .catch(function(error) {
-            console.log(error)
-        })
-    */
     random_verse = Math.floor(Math.random() * (+total_verses - +1)) + +1;
     current_verse_total = 0
     current_chapter = 0
@@ -49,7 +32,21 @@ $("#generate").click(function(){
         current_verse_total += chapter_details[current_chapter].verses
         current_chapter += 1
     }
-    console.log(random_verse)
-    console.log(chapter_details[current_chapter].name, random_verse - current_verse_total)
+    chapter = chapter_details[current_chapter].name
+    verse = random_verse - current_verse_total
+    bible_ref = " (" + chapter + ":" verse + ", KJV)"
+    var url = "https://api.biblia.com/v1/bible/content/kjv.html?passage=" + chapter.split(" ").join("") + "." + verse + "&key=" + api_key
+    fetch(url)
+        .then(function(data) {
+            console.log("Hi...")
+            return data.text();
+        })
+        .then(function(text) {
+            $("#verse").html(text + bible_ref)
+            console.log(text)
+        })
+        .catch(function(error) {
+            console.log(error)
+        })
 });
 </script>
