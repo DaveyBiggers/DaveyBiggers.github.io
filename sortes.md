@@ -12,7 +12,11 @@ var url = "https://api.biblia.com/v1/bible/content/kjv.txt?passage=John3.16&key=
 
 fetch(url)
     .then(function(data) {
-        console.log(data.text())
+        console.log("Hi...")
+        return data.text();
+    })
+    .then(function(text) {
+        console.log(text)
     })
     .catch(function(error) {
         console.log(error)
