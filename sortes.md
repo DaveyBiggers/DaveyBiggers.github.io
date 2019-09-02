@@ -34,7 +34,7 @@ $("#generate").click(function(){
     }
     chapter = chapter_details[current_chapter].name
     verse = random_verse - current_verse_total
-    bible_ref = " (" + chapter + ":" verse + ", KJV)"
+    bible_ref = " (" + chapter + ":" + verse + ", KJV)"
     var url = "https://api.biblia.com/v1/bible/content/kjv.html?passage=" + chapter.split(" ").join("") + "." + verse + "&key=" + api_key
     fetch(url)
         .then(function(data) {
