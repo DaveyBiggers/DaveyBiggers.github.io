@@ -1,11 +1,16 @@
 # Sortes Sanctorum
+Enter your question...
 
-Don't actually do this.
+<textarea>
+Enter your question here.
+Eg: "Should I move to Nebraska?", "Should I marry someone with a beard?", "What should I have for dinner", etc.etc.
+</textarea>
 
-<div id="sortes"></div>
+<button id="generate">Now find a random Bible verse</button>
 
-<button id="generate">Random Verse</button>
 <div id="verse"></div>
+
+NOTE: Don't actually do this. This is really, really NOT how to read the Bible.
 
 <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
 <script>
