@@ -5,7 +5,7 @@ Eg: "Should I emigrate to Venus?", "Should I marry someone with a ginger beard?"
 
 <button id="get_question">Generate question</button>
 
-<textarea id="question">
+<textarea id="question" rows="4" cols="80">
 "Why does it always rain on me?"
 </textarea>
 
@@ -28,7 +28,7 @@ var total_verses
 SE.init({
     clientId: 16095,
     key: 'ef9iDwUDndR9gPUsJdMnGg((',
-    channelUrl: 'http://daveybiggers.github.io/sortes/blank',
+    channelUrl: 'daveybiggers.github.io/sortes/blank',
     complete: function (data) { console.log("SE init complete - ", data.version); }
 });
 
