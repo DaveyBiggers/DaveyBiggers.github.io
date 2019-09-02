@@ -16,8 +16,11 @@ Now click "Get verse!" to answer your question by plucking a random verse from t
 NOTE: Don't actually do this. This is really, really NOT how to read the Bible.
 
 ANSWER:
-<div id="verse"></div>
+<textarea id="verse" readonly rows="4" cols="80">(This is not how to read the Bible, you realise.)</textarea>
 
+<br>
+<br>
+<a href="https://simplylisten.home.blog/2019/07/12/the-somewhat-improbable-fables-of-bob-2-agendas/">(Click here for the background on why this exists)</a>
 
 <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
 <script type='text/javascript' src='https://api.stackexchange.com/js/2.0/all.js'></script>
@@ -44,16 +47,17 @@ $().ready(function(){
 })
 
 $("#get_question").click(function(){
-    url = "https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=interpersonal"
+    sites = ["parenting", "interpersonal", "philosophy", "pets", "politics", "academia"];
+    site = sites[Math.floor(Math.random() * sites.length)]
+    url = "https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=" + site
     fetch(url)
         .then(function(data) {
             console.log("SE getting...")
             return data.json();
         })
         .then(function(json) {
-            //$("#question").html(text)
-            console.log(json)
-            $("#question").html(json.items[0].title)
+            var random_question = json.items[Math.floor(Math.random() * json.items.length)];
+            $("#question").html(random_question.title)
         })
         .catch(function(error) {
             console.log(error)
