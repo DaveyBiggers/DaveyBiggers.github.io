@@ -28,7 +28,7 @@ var total_verses
 SE.init({
     clientId: 16095,
     key: 'ef9iDwUDndR9gPUsJdMnGg((',
-    channelUrl: 'http://daveybiggers.github.io/blank',
+    channelUrl: 'http://daveybiggers.github.io/sortes/blank',
     complete: function (data) { console.log("SE init complete - ", data.version); }
 });
 
