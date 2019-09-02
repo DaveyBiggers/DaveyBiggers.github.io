@@ -14,7 +14,7 @@ Don't actually do this.
 var api_key = "b74dfab83a3e06f0f01850c93466c29d"
 var url = "https://api.biblia.com/v1/bible/content/kjv.txt?passage=John3.16&key=" + api_key
 
-$("#generate").onclick = function() {
+$("#generate").click(function(){
     chapter = Math.floor(Math.random() * (+4 - +1)) + +1;
     verse = Math.floor(Math.random() * (+10 - +1)) + +1;
     var url = "https://api.biblia.com/v1/bible/content/kjv.txt?passage=John" + chapter + "." + verse + "&key=" + api_key
@@ -30,7 +30,7 @@ $("#generate").onclick = function() {
         .catch(function(error) {
             console.log(error)
         })
-}
+});
 /*var xhttp = new XMLHttpRequest();
 xhttp.onreadystatechange = function() {
     if (this.readyState == 4 && this.status == 200) {
