@@ -25,12 +25,14 @@ ANSWER:
 var chapter_details
 var total_verses
 
+/*
 SE.init({
     clientId: 16095,
     key: 'ef9iDwUDndR9gPUsJdMnGg((',
-    channelUrl: 'daveybiggers.github.io/sortes/blank',
+    channelUrl: 'https://daveybiggers.github.io/sortes/blank',
     complete: function (data) { console.log("SE init complete - ", data.version); }
 });
+*/
 
 $().ready(function(){
     console.log("Loading verse counts...")
@@ -56,7 +58,7 @@ $("#get_question").click(function(){
         .catch(function(error) {
             console.log(error)
         })
-})
+});
 
 $("#generate").click(function(){
     var api_key = "b74dfab83a3e06f0f01850c93466c29d"
