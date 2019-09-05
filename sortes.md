@@ -2,9 +2,12 @@
 Enter your question here. <br>
 Eg: "Should I emigrate to Venus?", "Should I marry someone with a ginger beard?", "What should I have for dinner?", etc.etc.<br>
 (Or click "generate question" to retrieve a random question from the Interwebs.)<br>
+<br>
+<small>NB: Your question doesn't go anywhere, it's just for illustrative purposes.</small>
 
 <button id="get_question">Generate question</button>
 
+QUESTION:
 <textarea id="question" rows="4" cols="80">
 "Why does it always rain on me?"
 </textarea>
@@ -13,14 +16,12 @@ Now click "Get verse!" to answer your question by plucking a random verse from t
 
 <button id="generate">Get verse!</button>
 
-NOTE: Don't actually do this. This is really, really NOT how to read the Bible.
-
 ANSWER:
 <textarea id="verse" readonly rows="4" cols="80">(This is not how to read the Bible, you realise.)</textarea>
 
 <br>
 <br>
-<a href="https://simplylisten.home.blog/2019/07/12/the-somewhat-improbable-fables-of-bob-2-agendas/">(Click here for the background on why this exists)</a>
+NOTE: This is really, really NOT how to read the Bible. <a href="https://simplylisten.home.blog/2019/07/12/the-somewhat-improbable-fables-of-bob-2-agendas/">Click here for the background on why I created this.</a>
 
 <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
 <script type='text/javascript' src='https://api.stackexchange.com/js/2.0/all.js'></script>
@@ -47,17 +48,26 @@ $().ready(function(){
 })
 
 $("#get_question").click(function(){
-    sites = ["parenting", "interpersonal", "philosophy", "pets", "politics", "academia"];
+    sites = ["parenting", "interpersonal", "pets", "diy", "money", "skeptics", "outdoors", "lifehacks"];
     site = sites[Math.floor(Math.random() * sites.length)]
     url = "https://api.stackexchange.com/2.2/questions?order=desc&sort=activity&site=" + site
     fetch(url)
         .then(function(data) {
-            console.log("SE getting...")
             return data.json();
         })
         .then(function(json) {
-            var random_question = json.items[Math.floor(Math.random() * json.items.length)];
-            $("#question").html(random_question.title)
+            var question_title = ""
+            tries = 8
+            while (!question_title.endsWith('?') && tries > 0) {
+                var random_question = json.items[Math.floor(Math.random() * json.items.length)];
+                question_title = random_question.title
+                tries--;
+            }
+            if (!question_title.endsWith('?')) {
+                console.log("Couldn't find a question ending in a question-mark; adding.")
+                question_title += "?"
+            }
+            $("#question").html(question_title)
         })
         .catch(function(error) {
             console.log(error)
@@ -79,7 +89,6 @@ $("#generate").click(function(){
     var url = "https://api.biblia.com/v1/bible/content/kjv.txt?passage=" + chapter.split(" ").join("") + "." + verse + "&key=" + api_key
     fetch(url)
         .then(function(data) {
-            console.log("Hi...")
             return data.text();
         })
         .then(function(text) {
