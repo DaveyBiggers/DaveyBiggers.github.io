@@ -101,7 +101,30 @@ class TextAnimationItem {
         this.add_animation(start_time, end_time, last_atts.with_colour(colour));
     }
 
+    get_atts_at_time(atts, timestamp) {
+        var current_animation_phase = null;
+        for (var i = 0; i < this.animations.length; i++) {
+            var anim = this.animations[i];
+            if (anim.start_time <= timestamp) {
+                current_animation_phase = anim;
+            }
+            if (anim.start_time <= timestamp && anim.end_time >= timestamp) {
+                current_animation_phase = anim;
+                break;
+            }
+        }
+        if (current_animation_phase == null) {
+            atts = this.textatts;
+        } else {
+            var b = current_animation_phase.end_attributes;
+            var a = current_animation_phase.start_attributes;
+            var alpha = this.profile.get_interpolator(current_animation_phase.start_time, current_animation_phase.end_time, timestamp);
+            atts.interpolate(a, b, alpha);
+        }
+    }
+
     draw(context, timestamp) {
+        /*
         var current_animation_phase = null;
         for (var i = 0; i < this.animations.length; i++) {
             var anim = this.animations[i];
@@ -122,6 +145,9 @@ class TextAnimationItem {
             this.textatts.interpolate(a, b, alpha);
             this.textatts.draw(context);
         }
+        */
+       this.get_atts_at_time(this.textatts, timestamp);
+       this.textatts.draw(context);
     }
 }
 
@@ -237,6 +263,18 @@ function create_text_wipe(animations, txt, x, y, colour, time_offset) {
     return time_offset + 200;
 }
 
+function create_link_animation(a, b, start_time, end_time) {
+    var t1 = new TextAttributes();
+    var t2 = new TextAttributes();
+    a.get_atts_at_time(t1, start_time);
+    b.get_atts_at_time(t2, end_time);
+    var linker = new TextAnimationItem(t1.with_opacity(0));
+    linker.add_animation(start_time, start_time, t1);
+    linker.add_animation(start_time, end_time, t2);
+    linker.add_animation(end_time, end_time, t2.with_opacity(0));
+    return linker;
+}
+
 function create_multiline_text(animations, txt, x, y, colours, time_offset) {
     lines = txt.split("\n");
     for (var l = 0; l < lines.length; l++) {
@@ -263,52 +301,80 @@ window.addEventListener("load", function(){
     explanation = new TextAnimationItem(new TextAttributes("", 10, 180, 0, 1.0, "#222222", font="undefined", size=20, alignment="left"));
     current_stage = new TextAnimationItem(new TextAttributes("1: Traverse string backwards, labelling characters as L(larger) or S(smaller)", 10, 30, 0, 1.0, "#111111", font=undefined, size=20, alignment="left"));
 
+    var speed = 0.5;
+
     for (var i = letters.length - 1; i >=0; i--) {
-        pointer.add_moveto(time_offset, time_offset + 200, 30 + i * 20, 60);
-        letters[i].add_pulse(time_offset + 200, time_offset + 600, "#ff0000");
+        pointer.add_moveto(time_offset, time_offset + (speed * 200), 30 + i * 20, 60);
+        letters[i].add_pulse(time_offset + (speed * 200), time_offset + (speed * 600), "#ff0000");
         var isS = true;
         if (i < letters.length - 1) {
             if (text[i] < text[i + 1]) {
-                explanation.add_text_change(time_offset, time_offset + 100, "'" + text[i] + "' < '" + text[i + 1] + "'");
+                explanation.add_text_change(time_offset, time_offset + (speed * 100), "'" + text[i] + "' < '" + text[i + 1] + "'");
                 isS = true;
             } else if (text[i] > text[i + 1]) {
-                explanation.add_text_change(time_offset, time_offset + 100, "'" + text[i] + "' > '" + text[i + 1] + "'");
+                explanation.add_text_change(time_offset, time_offset + (speed * 100), "'" + text[i] + "' > '" + text[i + 1] + "'");
                 isS = false;
             } else {
                 isS = l_or_s[i + 1];
-                explanation.add_text_change(time_offset, time_offset + 100, "'" + text[i] + "' == '" + text[i + 1] + "'");
+                explanation.add_text_change(time_offset, time_offset + (speed * 100), "'" + text[i] + "' == '" + text[i + 1] + "'");
             }
         }
         var lors = null;
         l_or_s[i] = isS;
         if (isS) {
-            letters[i].add_offset(time_offset+700, time_offset+1000, 0, 5, 0);
+            letters[i].add_offset(time_offset+(speed * 700), time_offset+(speed * 1000), 0, 5, 0);
             lors = new TextAnimationItem(ta_s.with_position(30 + i * 20, 100));
         } else {
-            letters[i].add_offset(time_offset+700, time_offset+1000, 0, -5, 0);
+            letters[i].add_offset(time_offset+(speed * 700), time_offset+(speed * 1000), 0, -5, 0);
             lors = new TextAnimationItem(ta_l.with_position(30 + i * 20, 100));
         }
-        lors.add_fade_in(time_offset+1000, time_offset+1500);
+        lors.add_fade_in(time_offset+(speed * 1000), time_offset+(speed * 1500));
         l_or_s_chars.unshift(lors);
-        time_offset += 1000;
+        time_offset += speed * 1000;
     }
-    pointer.add_fade_out(time_offset, time_offset + 500);
-    explanation.add_fade_out(time_offset, time_offset + 500);
-    current_stage.add_text_change(time_offset + 500, time_offset + 1200, "2: Traverse string forwards, finding left-most S characters (LMS)");
-    time_offset += 2000;
-    pointer.add_fade_in(time_offset, time_offset + 500);
-    time_offset += 500;
+    pointer.add_fade_out(time_offset, time_offset + speed * 500);
+    explanation.add_fade_out(time_offset, time_offset + speed * 500);
+    current_stage.add_text_change(time_offset + speed * 500, time_offset + speed * 1200, "2: Traverse string forwards, finding left-most S characters (LMS)");
+    time_offset += speed * 2000;
+    pointer.add_fade_in(time_offset, time_offset + speed * 500);
+    time_offset += speed * 500;
     for (var i = 0; i < letters.length; i++) {
-        pointer.add_moveto(time_offset, time_offset + 100, 30 + i * 20, 60);
-        l_or_s_chars[i].add_pulse(time_offset + 100, time_offset + 300, "#ff0000");
+        pointer.add_moveto(time_offset, time_offset + speed * 100, 30 + i * 20, 60);
+        l_or_s_chars[i].add_pulse(time_offset + speed * 100, time_offset + speed * 300, "#ff0000");
         if (l_or_s[i] && (i == 0 || !l_or_s[i-1])) {
-            l_or_s_chars[i].add_offset(time_offset + 300, time_offset + 400, 0, -5);
-            l_or_s_chars[i].add_colour_change(time_offset + 400, time_offset + 1000, "#ff4444");
+            l_or_s_chars[i].add_offset(time_offset + speed * 300, time_offset + speed * 400, 0, -5);
+            l_or_s_chars[i].add_colour_change(time_offset + speed * 400, time_offset + speed * 1000, "#ff4444");
         }
-        time_offset += 500;
+        time_offset += speed * 500;
     }
+
+    current_stage.add_text_change(time_offset + speed * 500, time_offset + speed * 1200, "3: Traverse string, calculate bucket sizes");
+    var alphabet=[];
+    var alphabet_chars = "$abcdefghijklmnopqrstuvwxyz";
+    var counts = Array(alphabet_chars.length).fill(0);
+    var count_text = "0".repeat(alphabet_chars.length);
+    var count_chars = []
+    time_offset += speed * 2000;
+    time_offset_delta = create_text_wipe(alphabet, alphabet_chars, 30, 240, "#bbaa44", time_offset) - time_offset;
+    time_offset = create_text_wipe(count_chars, count_text, 30, 270, "#44aabb", time_offset + time_offset_delta / 2);
+
+    links = []
+    for (var i = 0; i < letters.length; i++) {
+        pointer.add_moveto(time_offset, time_offset + speed * 100, 30 + i * 20, 60);
+        letters[i].add_pulse(time_offset + speed * 400, time_offset + speed * 900, "#ff0000");
+        var char_value = 1 + text.charCodeAt(i) - 'a'.charCodeAt(0);
+        if (char_value < 0) {
+            char_value = 0; // "$" is less than "a".
+        }
+        alphabet[char_value].add_pulse(time_offset + speed * 900, time_offset + speed * 1400, "#ff0000");
+        links.push(create_link_animation(letters[i], alphabet[char_value], time_offset + speed * 700, time_offset + speed * 1100));
+        counts[char_value] += 1;
+        count_chars[char_value].add_text_change(time_offset + speed * 1200, time_offset + speed * 1900, counts[char_value]);
+        time_offset += speed * 2000;
+    }
+
     letters.push(pointer)
-    full_animation = letters.concat(l_or_s_chars);
+    full_animation = letters.concat(l_or_s_chars).concat(alphabet).concat(count_chars).concat(links);
     full_animation.push(explanation);
     full_animation.push(current_stage);
     window.requestAnimationFrame(function(timestamp) { draw(full_animation, timestamp); });
