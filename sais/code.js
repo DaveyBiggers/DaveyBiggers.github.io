@@ -246,7 +246,7 @@ function build_initial_suffixes(txt) {
     return text_items
 }
 
-function create_text_wipe(animations, txt, x, y, colour, time_offset) {
+function create_text_wipe(animations, txt, x, y, colour, time_offset, speed) {
     for (var i = 0; i < txt.length; i++) {
         var chartxt = txt.substring(i, i + 1);
         var charx = x + i * 20;
@@ -255,12 +255,12 @@ function create_text_wipe(animations, txt, x, y, colour, time_offset) {
         var t2 = new TextAttributes(chartxt, charx, chary - 10, 270, 1.0, colour);
         var t3 = new TextAttributes(chartxt, charx, chary, 0, 1.0, colour);
         var animchar = new TextAnimationItem(t1);
-        time_offset += 20;
-        animchar.add_animation(time_offset, time_offset + 100, t2);
-        animchar.add_animation(time_offset + 100, time_offset + 200, t3);
+        time_offset += speed * 20;
+        animchar.add_animation(time_offset, time_offset + speed * 100, t2);
+        animchar.add_animation(time_offset + speed * 100, time_offset + speed * 200, t3);
         animations.push(animchar);
     }
-    return time_offset + 200;
+    return time_offset + speed * 200;
 }
 
 function create_link_animation(a, b, start_time, end_time) {
@@ -285,9 +285,11 @@ function create_multiline_text(animations, txt, x, y, colours, time_offset) {
 }
 
 window.addEventListener("load", function(){
+    var speed = 0.01;
+
     var letters = []
     text = "mmiissiissiippii$"
-    time_offset = create_text_wipe(letters, text, 30, 140, "#000000", 0);
+    time_offset = create_text_wipe(letters, text, 30, 140, "#000000", 0, speed);
     var t = new TextAttributes("", 0, 0, 180, 0, "#000000");
     l_or_s = new Int8Array(letters.length);
     var tc = new TextAttributes("v", 500, 500, 0, 0, "#ff0000");
@@ -300,8 +302,6 @@ window.addEventListener("load", function(){
     l_or_s_chars = []
     explanation = new TextAnimationItem(new TextAttributes("", 10, 180, 0, 1.0, "#222222", font="undefined", size=20, alignment="left"));
     current_stage = new TextAnimationItem(new TextAttributes("1: Traverse string backwards, labelling characters as L(larger) or S(smaller)", 10, 30, 0, 1.0, "#111111", font=undefined, size=20, alignment="left"));
-
-    var speed = 0.5;
 
     for (var i = letters.length - 1; i >=0; i--) {
         pointer.add_moveto(time_offset, time_offset + (speed * 200), 30 + i * 20, 60);
@@ -338,16 +338,19 @@ window.addEventListener("load", function(){
     time_offset += speed * 2000;
     pointer.add_fade_in(time_offset, time_offset + speed * 500);
     time_offset += speed * 500;
+    var lms_suffixes = [];
     for (var i = 0; i < letters.length; i++) {
         pointer.add_moveto(time_offset, time_offset + speed * 100, 30 + i * 20, 60);
         l_or_s_chars[i].add_pulse(time_offset + speed * 100, time_offset + speed * 300, "#ff0000");
         if (l_or_s[i] && (i == 0 || !l_or_s[i-1])) {
             l_or_s_chars[i].add_offset(time_offset + speed * 300, time_offset + speed * 400, 0, -5);
             l_or_s_chars[i].add_colour_change(time_offset + speed * 400, time_offset + speed * 1000, "#ff4444");
+            lms_suffixes.push(i);
         }
         time_offset += speed * 500;
     }
 
+    pointer.add_fade_out(time_offset, time_offset + speed * 500);
     current_stage.add_text_change(time_offset + speed * 500, time_offset + speed * 1200, "3: Traverse string, calculate bucket sizes");
     var alphabet=[];
     var alphabet_chars = "$abcdefghijklmnopqrstuvwxyz";
@@ -355,10 +358,10 @@ window.addEventListener("load", function(){
     var count_text = "0".repeat(alphabet_chars.length);
     var count_chars = []
     time_offset += speed * 2000;
-    time_offset_delta = create_text_wipe(alphabet, alphabet_chars, 30, 240, "#bbaa44", time_offset) - time_offset;
-    time_offset = create_text_wipe(count_chars, count_text, 30, 270, "#44aabb", time_offset + time_offset_delta / 2);
+    time_offset_delta = create_text_wipe(alphabet, alphabet_chars, 30, 190, "#bbaa44", time_offset, speed) - time_offset;
+    time_offset = create_text_wipe(count_chars, count_text, 30, 230, "#44aabb", time_offset + time_offset_delta / 2, speed);
 
-    links = []
+    var links = []
     for (var i = 0; i < letters.length; i++) {
         pointer.add_moveto(time_offset, time_offset + speed * 100, 30 + i * 20, 60);
         letters[i].add_pulse(time_offset + speed * 400, time_offset + speed * 900, "#ff0000");
@@ -373,9 +376,108 @@ window.addEventListener("load", function(){
         time_offset += speed * 2000;
     }
 
+    current_stage.add_text_change(time_offset + speed * 500, time_offset + speed * 1200, "4: Create buckets, find heads and tails");
+    var index = 0;
+    var cells = [];
+    var cell_ta = new TextAttributes()
+    var cell_ta = new TextAttributes("*", 500, 500, 0, 0, "#cccccc");
+
+    var tails = [];
+    var heads = [];
+    var bucket_indices = {};
+    var num_buckets = 0;
+
+    for (var i = 0; i < alphabet.length; i++) {
+        if (counts[i] > 0) {
+            count_chars[i].add_pulse(time_offset, time_offset + speed * 1000, "#ff0000");
+            alphabet[i].add_pulse(time_offset, time_offset + speed * 1000, "#ff0000");
+            alphabet[i].add_moveto(time_offset + speed * 1000, time_offset + speed * 1500, 130 + index * 20, 260);
+            var start_index = index;
+            heads.push(start_index);
+            for (var j = 0; j < counts[i]; j++) {
+                var t1 = cell_ta.with_text(alphabet_chars[i]).with_position(130 + start_index * 20, 260);
+                var cell_anim = new TextAnimationItem(t1);
+                cell_anim.add_animation(time_offset + speed * 2000, time_offset + speed * 3000, t1.with_opacity(1.0).with_position(130 + index * 20, 260));
+                cells.push(cell_anim);
+                index++;
+            }
+            tails.push(index - 1);
+            bucket_indices[alphabet_chars[i]] = num_buckets;
+            num_buckets += 1;
+        }
+    }
+    for (var i = 0; i < alphabet.length; i++) {
+        alphabet[i].add_fade_out(time_offset + speed * 2000, time_offset + speed * 3000);
+        count_chars[i].add_fade_out(time_offset + speed * 2000, time_offset + speed * 3000);
+    }
+
+    speed = 1.0;
+
+    var heads_anim = new TextAnimationItem(new TextAttributes("HEADS:", 30, 210, 0, 0, "#008800", "lucida console", 20, "left"));
+    var tails_anim = new TextAnimationItem(new TextAttributes("TAILS:", 30, 230, 0, 0, "#000088", "lucida console", 20, "left"));
+    heads_anim.add_fade_in(time_offset + speed * 2500, time_offset + speed * 3000);
+    tails_anim.add_fade_in(time_offset + speed * 2500, time_offset + speed * 3000);
+    var tc_ht = new TextAttributes("v", 500, 500, 0, 0, "#ff0000", "lucida console", 20, "right");
+    var heads_pointers = [];
+    var tails_pointers = [];
+
+    for (var i = 0; i < tails.length; i++) {
+        var head_pointer = new TextAnimationItem(tc_ht.with_colour("#00aa00").with_position(130 + heads[i] * 20, 210), new  AnimationProfile("linear"));
+        head_pointer.add_fade_in(time_offset + speed * 2500, time_offset + speed * 3500);
+        heads_pointers.push(head_pointer);
+
+        var tail_pointer = new TextAnimationItem(tc_ht.with_colour("#0000aa").with_position(130 + tails[i] * 20, 230), new  AnimationProfile("linear"));
+        tail_pointer.add_fade_in(time_offset + speed * 2500, time_offset + speed * 3500);
+        tails_pointers.push(tail_pointer);
+    }
+    /*
+    sa = Array(letters.length).fill(-1);
+    sa_anims = [];
+    for (var i = 0; i < letters.length; i++) {
+        sa_cell = new TextAnimationItem(ta_l.with_position(30 + i * 20, 100));
+        sa_anims.push(new )
+    }*/
+    time_offset += 4000;
+    current_stage.add_text_change(time_offset, time_offset + speed * 700, "5: Traverse string forwards, adding LMS suffixes to the correct bucket");
+
+    for (var i = 0; i < letters.length; i++) {
+        letters[i].add_moveto(time_offset, time_offset + speed * 200, 30 + i * 20, 140);
+    }
+    pointer.add_fade_in(time_offset, time_offset + speed * 200);
+    time_offset += speed * 200;
+    var suffix_movements = [];
+    for (var i = 0; i < lms_suffixes.length; i++) {
+        pointer.add_moveto(time_offset, time_offset + speed * 100, 30 + lms_suffixes[i] * 20, 60);
+        time_offset += 300;
+        for (var j = 0; j < letters.length; j++) {
+            if (j < lms_suffixes[i]) {
+                letters[j].add_fade_out(time_offset, time_offset + speed * 250);
+            }
+            else {
+                letters[j].add_colour_change(time_offset, time_offset + speed * 250, "#ff0000");
+                letters[j].add_colour_change(time_offset + speed * 500, time_offset + speed * 750, "#000000");
+            }
+        }
+        letters[lms_suffixes[i]].add_pulse(time_offset + speed * 750, time_offset + speed * 1250, "#ff0000");
+        var bucket = bucket_indices[text[lms_suffixes[i]]]
+        tails_pointers[bucket].add_pulse(time_offset + speed * 750, time_offset + speed * 1250, "#ff0000");
+        links.push(create_link_animation(pointer, tails_pointers[bucket], time_offset + speed * 250, time_offset + speed * 750));
+        var suffix_string = text.substring(lms_suffixes[i]);
+        var suffix_animation = new TextAnimationItem(new TextAttributes(suffix_string, 30 + lms_suffixes[i] * 20, 140, 0, 0, "#000000", "lucida console", 30, "left"));
+        suffix_animation.add_fade_in(time_offset + speed * 1000, time_offset + speed * 1250);
+        var ta_rotated = new TextAttributes(suffix_string, 130 + tails[bucket] * 20, 290, -90, 1.0, "#004400", "lucida console", 20, "left");
+        suffix_animation.add_animation(time_offset + speed * 1250, time_offset + speed * 1800, ta_rotated);
+        suffix_movements.push(suffix_animation);
+        time_offset += 2000;
+        tails[bucket]--;
+    }
+
     letters.push(pointer)
-    full_animation = letters.concat(l_or_s_chars).concat(alphabet).concat(count_chars).concat(links);
+    full_animation = letters.concat(l_or_s_chars).concat(alphabet).concat(count_chars).concat(links).concat(cells).concat(heads_pointers).concat(tails_pointers).concat(suffix_movements);
     full_animation.push(explanation);
     full_animation.push(current_stage);
+    full_animation.push(heads_anim);
+    full_animation.push(tails_anim);
     window.requestAnimationFrame(function(timestamp) { draw(full_animation, timestamp); });
+
 })
