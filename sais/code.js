@@ -463,11 +463,14 @@ window.addEventListener("load", function(){
         tails_pointers[bucket].add_pulse(time_offset + speed * 750, time_offset + speed * 1250, "#ff0000");
         links.push(create_link_animation(pointer, tails_pointers[bucket], time_offset + speed * 250, time_offset + speed * 750));
         var suffix_string = text.substring(lms_suffixes[i]);
-        var suffix_animation = new TextAnimationItem(new TextAttributes(suffix_string, 30 + lms_suffixes[i] * 20, 140, 0, 0, "#000000", "lucida console", 30, "left"));
-        suffix_animation.add_fade_in(time_offset + speed * 1000, time_offset + speed * 1250);
-        var ta_rotated = new TextAttributes(suffix_string, 130 + tails[bucket] * 20, 290, -90, 1.0, "#004400", "lucida console", 20, "left");
-        suffix_animation.add_animation(time_offset + speed * 1250, time_offset + speed * 1800, ta_rotated);
-        suffix_movements.push(suffix_animation);
+        var this_suffix_animation = [];
+        for (var j = 0; j < suffix_string.length; j++) {
+            var suffix_animation = new TextAnimationItem(new TextAttributes(suffix_string[j], 30 + (j + lms_suffixes[i]) * 20, 140, 0, 0, "#000000", "lucida console", 30, "right"));
+            suffix_animation.add_fade_in(time_offset + speed * 1000, time_offset + speed * 1250);
+            var ta_rotated = new TextAttributes(suffix_string[j], 130 + tails[bucket] * 20, 290 + j * 8, -90, 1.0, "#004400", "lucida console", 16, "left");
+            suffix_animation.add_animation(time_offset + speed * 1250, time_offset + speed * 1800, ta_rotated);
+            suffix_movements.push(suffix_animation);    
+        }
         time_offset += 2000;
         tails[bucket]--;
     }
