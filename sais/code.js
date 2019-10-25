@@ -77,7 +77,9 @@ class TextAnimationItem {
         }
         return this.initial_textatts;
     }
-
+    get_text() {
+        return this.latest_text_atts().txt;
+    }
     add_fade_out_dep(start_time, end_time) {
         var last_atts = this.latest_text_atts();
         this.add_animation_dep(start_time, end_time, last_atts.with_opacity(0));
@@ -122,6 +124,18 @@ class TextAnimationItem {
         var last_atts = this.latest_text_atts();
         this.add_animation_dep(start_time, (start_time + end_time) / 2, last_atts.with_colour(colour).with_size(last_atts.size + 5));
         this.add_animation_dep((start_time + end_time) / 2, end_time, last_atts);
+        return this;
+    }
+    add_twitch(timer, magnitude, num_twitches = 8) {
+        var resting_atts = this.latest_text_atts();
+        var twitching_atts = resting_atts.with_offset(0, magnitude);
+        var duration = timer.duration_of_next_animation;
+        var twitch_duration = duration / num_twitches;
+        for (var i = 0; i < num_twitches; i++) {
+            this.add_animation(timer.from_relative(i * twitch_duration, (i + 0.5) * twitch_duration), twitching_atts);
+            this.add_animation(timer.from_relative((i + 0.5) * twitch_duration, (i + 1) * twitch_duration), resting_atts);
+        }
+        timer.update();
         return this;
     }
     add_pulse(timer, colour) {
@@ -306,6 +320,16 @@ class TimeController {
         tc.set_time(this.time + this.speed * start);
         return tc.with_dur(end - start);
     }
+    with_fraction_delay(fraction) {
+        var tc = new TimeController(this.speed, "temp");
+        tc.set_time(this.time + this.speed * this.duration_of_next_animation * fraction);
+        return tc.with_dur((1.0 - fraction) * this.duration_of_next_animation);
+    }
+    copy() {
+        var tc = new TimeController(this.speed, "temp");
+        tc.set_time(this.time);
+        return tc.with_dur(this.duration_of_next_animation);
+    }
     with_trans_dur(duration) {
         this.duration_of_next_animation = duration;
         this.skip_next_update = true;
@@ -340,8 +364,9 @@ class AnimatedArray {
         this.pointer_locations = new Map();
         this.pointer_line_offsets = new Map();
         this.animated_elements = [];
-
+        this.index_elements = [];
         this.pointer_speed = 200;
+        this.pointer_stacks = new Map();
     }
     from_text(text) {
         this.length = text.length;
@@ -356,10 +381,16 @@ class AnimatedArray {
         this.arr = arr;
         return this;
     }
-    create_pointer(name, line_offset = -1, timer, start_location=-1, colour="#ff0000") {
+    from_animels(animels) {
+        this.length = animels.length;
+        this.animated_elements = animels;
+        this.arr = new Array(animels.length);
+        return this;
+    }
+    create_pointer(name, line_offset = -1, timer, start_location=-1, colour="#ff0000", char_scale = 0.6) {
         var char = (line_offset > 0) ? "^" : "v";
-        var ta = new TextAttributes(char, this.x + start_location * this.cell_size, this.y + this.char_size * line_offset, 0, 0, colour);
-        var pointer = new TextAnimationItem(ta, new  AnimationProfile("cheeky", 0.3));
+        var ta = new TextAttributes(char, this.x + start_location * this.cell_size, this.y + this.char_size * line_offset, 0, 0, colour, font="lucida console", size=this.char_size*char_scale, alignment="center");
+        var pointer = new TextAnimationItem(ta, new AnimationProfile("cheeky", 0.3));
         pointer.add_animation_dep(timer.get_start_time(), timer.get_end_time(), ta.with_opacity(1.0));
         timer.update();
         this.pointers.set(name, pointer);
@@ -367,14 +398,77 @@ class AnimatedArray {
         this.pointer_line_offsets.set(name, line_offset);
         return pointer;
     }
+    push_pointer(name) {
+        if (!this.pointer_stacks.has(name)) {
+            this.pointer_stacks.set(name, []);
+        }
+        this.pointer_stacks.get(name).push(this.pointer_locations.get(name));
+    }
+    pop_pointer(name, timer) {
+        console.log(name, " pop!");
+        if (this.pointer_stacks.has(name)) {
+            var index = this.pointer_stacks.get(name).pop();
+            console.log("Previous index:", index);
+            this.move_pointer_to(name, index, timer);
+        }
+    }
+    create_indices(line_offset = 1, timer, colour="#111111") {
+        var ta = new TextAttributes("*", -1000, -1000, 180, 0, colour, font="lucida console", size=this.char_size * 0.5, alignment="center");
+        for (var i = 0; i < this.arr.length; i++) {
+            var digit = new TextAnimationItem(ta.with_text(String(i)), new AnimationProfile("cheeky", 0.3));
+            var ta_destination = ta.with_text(String(i)).with_opacity(1.0).with_position(this.x + i * this.cell_size, this.y + this.char_size * line_offset, 0);
+            digit.add_animation(timer.with_fraction_delay(i / this.arr.length), ta_destination);
+            this.index_elements.push(digit);
+        }
+    }
+    get_copy_of_animations_from_index(index) {
+        var copied_elements = [];
+        for (var i = index; i < this.animated_elements.length; i++) {
+            var ta = this.animated_elements[i].latest_text_atts();
+            var flyer = new TextAnimationItem(ta.with_opacity(0), new AnimationProfile("cheeky", 0.3));
+            copied_elements.push(flyer);
+        }
+        return copied_elements;
+    }
+    get_copy_of_animations_from_pointer(name) {
+        var index = this.pointer_locations.get(name);
+        return this.get_copy_of_animations_from_index(index);
+    }
+    set_value_at(index, value, timer) {
+        this.arr[index] = value;
+        this.animated_elements[index].add_text_change(timer, String(value));
+    }
+    perform_split_animation(pointer_name, func_left, func_right) {
+        var index = this.pointer_locations.get(pointer_name);
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            if (i < index) {
+                func_left(this.animated_elements[i]);
+            } else {
+                func_right(this.animated_elements[i]);
+            }
+        }
+    }
+    reset_positions(timer) {
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            this.animated_elements[i].add_moveto(timer.copy(), this.x + i * this.cell_size, this.y, 0);
+        }
+        timer.update();
+    }
     get_animated_elements() {
-        return this.animated_elements.concat(Array.from(this.pointers.values()));
+        return this.animated_elements.concat(this.index_elements).concat(Array.from(this.pointers.values()));
     }
     animel_at(index) {
         return this.animated_elements[index];
     }
     value_at(index) {
         return this.arr[index];
+    }
+    get_cell_x_at_pointer(name) {
+        var index = this.pointer_locations.get(name);
+        return this.x + index * this.cell_size;
+    }
+    get_cell_y_at_pointer(name) {
+        return this.y;
     }
     animel_at_pointer(name) {
         var index = this.pointer_locations.get(name);
@@ -393,9 +487,13 @@ class AnimatedArray {
     get_pointer(name) {
         return this.pointers.get(name);
     }
+    pointer_to_index(name) {
+        return this.pointer_locations.get(name);
+    }
     move_pointer_to(name, index, timer) {
         var pointer = this.pointers.get(name);
         if (pointer) {
+            console.log("MOVING POINTER!?");
             this.pointer_locations.set(name, index);
             pointer.add_moveto(timer, this.x + index * this.cell_size, this.y + this.char_size * this.pointer_line_offsets.get(name));
         }
@@ -432,10 +530,37 @@ class AnimatedArray {
     }
     display(timer) {
         console.log("Creating text wipe from ", this.arr);
-        return create_text_wipe(this.animated_elements, this.arr, this.x, this.y, this.colour, timer, this.cell_size);
+        return create_text_wipe(this.animated_elements, this.arr, this.x, this.y, this.colour, timer, this.cell_size, this.char_size);
     }
     fill_blank(timer) {
-        return create_text_wipe(this.animated_elements, " ".repeat(this.arr.length), this.x, this.y, this.colour, timer, this.cell_size);
+        return create_text_wipe(this.animated_elements, " ".repeat(this.arr.length), this.x, this.y, this.colour, timer, this.cell_size, this.char_size);
+    }
+    explode(timer) {
+        var animels = this.get_animated_elements();
+        for (var i = 0; i < animels.length; i++) {
+            var ta = new TextAttributes();
+            animels[i].get_atts_at_time(ta, timer.get_start_time());
+            var destination_ta = ta.with_opacity(0).with_colour("#ff0000").with_position((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000, Math.random() * 360);
+            animels[i].add_animation(timer.copy(), destination_ta);
+        }
+        timer.update();
+    }
+    add_fade_in(timer) {
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            this.animated_elements[i].add_fade_in(timer.copy());
+        }
+        timer.update();
+    }
+    add_colour_change(timer, colour) {
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            this.animated_elements[i].add_colour_change(timer.copy(), colour);
+        }
+        timer.update();
+    }
+    twitch_index(timer, index) {
+        if (this.index_elements.length > index && index >= 0) {
+            this.index_elements[index].add_twitch(timer, 10);
+        }
     }
 }
 
@@ -448,14 +573,14 @@ function build_initial_suffixes(txt) {
     return text_items
 }
 
-function create_text_wipe(animations, txt, x, y, colour, timer, char_width=20) {
+function create_text_wipe(animations, txt, x, y, colour, timer, char_width=20, font_size=30) {
     for (var i = 0; i < txt.length; i++) {
         var chartxt = txt[i];
         var charx = x + i * char_width;
         var chary = y;
-        var t1 = new TextAttributes(chartxt, charx + 10, chary + 10, 90, 0, colour);
-        var t2 = new TextAttributes(chartxt, charx, chary - 10, 270, 1.0, colour);
-        var t3 = new TextAttributes(chartxt, charx, chary, 0, 1.0, colour);
+        var t1 = new TextAttributes(chartxt, charx + 10, chary + 10, 90, 0, colour, font="lucida console", size=font_size, alignment="center");
+        var t2 = new TextAttributes(chartxt, charx, chary - 10, 270, 1.0, colour, font="lucida console", size=font_size, alignment="center");
+        var t3 = new TextAttributes(chartxt, charx, chary, 0, 1.0, colour, font="lucida console", size=font_size, alignment="center");
         var animchar = new TextAnimationItem(t1);
         timer.pause(20);
         timer.push_time();
@@ -516,6 +641,20 @@ function create_multiline_text(animations, txt, x, y, colours, time_offset) {
     return time_offset;
 }
 
+function fly_and_rotate_text(dest_x, dest_y, characters, timer) {
+    var spread_time = Math.min(200, timer.duration_of_next_animation);
+    var post_gap = timer.duration_of_next_animation - spread_time;
+    var gap = spread_time / characters.length;
+    for (var j = 0; j < characters.length; j++) {
+        var new_y = 54 + dest_y + j * 12;
+        var ta_destination = new TextAttributes(characters[j].get_text(), dest_x - 7, new_y, -90, 1.0, "#004400", "lucida console", 18, "center");
+        var start_time = characters.length - j * gap;
+        characters[j].add_fade_in(timer.from_relative(start_time, start_time + 1));
+        characters[j].add_animation(timer.from_relative(start_time + 2, start_time + post_gap), ta_destination);
+    }
+    timer.update();
+}
+
 window.addEventListener("load", function(){
     //old_method();
     //return;
@@ -523,6 +662,7 @@ window.addEventListener("load", function(){
     timer = new TimeController(1, "main");
 
     var text = "mmiissiissiippii$";
+    //var text = "cabbage$";
     var text_length = text.length;
 
     var text_x = 40;
@@ -541,6 +681,9 @@ window.addEventListener("load", function(){
 
     var cells_x = 130;
     var cells_y = 440;
+
+    var sa_y = cells_y + 30;
+    var sa_x = cells_x;
 
     var text_anim = new AnimatedArray(text_x, text_y, text_font_size, text_cell_size, "#000000").from_text(text);
     text_anim.display(timer);
@@ -583,10 +726,6 @@ window.addEventListener("load", function(){
     text_anim.get_pointer("pc").add_fade_out(timer.with_dur(500));
     explanation.add_fade_out(timer.with_dur(500));
 
-    //var ta_l = new TextAttributes("L", 500, 500, 0, 0, "#00cc00");
-    //var ta_s = new TextAttributes("S", 500, 500, 0, 0, "#0000cc");
-
-
     // STAGE TWO
     timer.pause(500);
     current_stage.add_text_change(timer.with_dur(700), "2: Traverse string forwards, finding left-most S characters (LMS)");
@@ -610,7 +749,7 @@ window.addEventListener("load", function(){
     var alphabet = new AnimatedArray(alphabet_x, alphabet_y, text_font_size, text_cell_size, "#bbaa44").from_text(alphabet_chars);
     alphabet.display(timer);
 
-    var counts = new AnimatedArray(alphabet_x, alphabet_y + 40, text_font_size / 2, text_cell_size, "#44aabb").from_array(new Array(alphabet_chars.length).fill(0));
+    var counts = new AnimatedArray(alphabet_x, alphabet_y + 40, text_font_size * 0.8, text_cell_size, "#44aabb").from_array(new Array(alphabet_chars.length).fill(0));
     counts.display(timer);
 
     var links = []
@@ -630,31 +769,20 @@ window.addEventListener("load", function(){
     }
 
     // STAGE FOUR
-    timer.speed = 1.0;
-
     current_stage.add_text_change(timer.with_dur(700), "4: Create buckets, find heads and tails");
     var index = 0;
     var cells = [];
-    var cell_ta = new TextAttributes()
-    var cell_ta = new TextAttributes("*", 500, 500, 0, 0, "#cccccc");
-
-    var tails = [];
-    var heads = [];
-    var bucket_indices = {};
-    var num_buckets = 0;
+    var tail_pointer_names = [];
 
     var heads_anim = new TextAnimationItem(new TextAttributes("HEADS:", text_x, cells_y - 60, 0, 0, "#008800", "lucida console", 20, "left"));
     var tails_anim = new TextAnimationItem(new TextAttributes("TAILS:", text_x, cells_y - 30, 0, 0, "#000088", "lucida console", 20, "left"));
-    var sa_anim = new TextAnimationItem(new TextAttributes("SA:", text_x, cells_y, 0, 0, "#880000", "lucida console", 20, "left"));
     heads_anim.add_fade_in(timer.with_dur(200));
     tails_anim.add_fade_in(timer.with_dur(200));
-    sa_anim.add_fade_in(timer.with_dur(200));
 
     var cells = new AnimatedArray(cells_x, cells_y, text_font_size, text_cell_size, "#ff0000").from_text(" ".repeat(text_length));
     cells.display(timer);
     alphabet.create_pointer("pc", -1, timer.with_dur(400), 0, "#0000ff");
     cells.create_pointer("pc", 1, timer.with_dur(400), 0, "#440088");
-
 
     var index = 0;
     for (var i = 0; i < alphabet_chars.length; i++) {
@@ -670,72 +798,183 @@ window.addEventListener("load", function(){
             }
             timer.pause(500);
             cells.create_pointer("head_" + alphabet.value_at_pointer("pc"), -2, timer.with_trans_dur(300), head_index, "#008800");
-            cells.create_pointer("tail_" + alphabet.value_at_pointer("pc"), -1, timer.with_dur(300), index - 1, "#000088");
+            var tail_pointer_name = "tail_" + alphabet.value_at_pointer("pc");
+            tail_pointer_names.push(tail_pointer_name);
+            cells.create_pointer(tail_pointer_name, -1, timer.with_dur(300), index - 1, "#000088");
+            cells.push_pointer(tail_pointer_name);  // We're going to move them around in the next step - this means we can reset them afterwards.
         }
         alphabet.increment_pointer("pc", false, timer.with_dur(100));
     }
-    /*
-    for (var i = 0; i < alphabet_chars.length; i++) {
-        if (counts.value_at(i) > 0) {
-            counts.animel_at(i).add_pulse(time_offset.with_trans_dur(1000), "#ff0000");
-            alphabet.animel_at(i).add_pulse(time_offset.with_dur(1000), "#ff0000");
-            alphabet.animel_at(i).add_moveto(time_offset.from_relative(1000, 1500), 130 + index * 20, 260);
-            var start_index = index;
-            heads.push(start_index);
-            for (var j = 0; j < counts.value_at(i); j++) {
-                var t1 = cell_ta.with_text(alphabet_chars[i]).with_position(130 + start_index * 20, 260);
-                var cell_anim = new TextAnimationItem(t1);
-                cell_anim.add_animation_dep(time_offset + speed * 2000, time_offset + speed * 3000, t1.with_opacity(1.0).with_position(130 + index * 20, 260));
-                cells.push(cell_anim);
-                index++;
+
+    // STAGE FIVE
+    slots_to_suffix_strings = new Array(text_length);
+    alphabet.explode(timer.with_trans_dur(700));
+    counts.explode(timer.with_trans_dur(700));
+    text_anim.reset_positions(timer.with_dur(200));
+    text_anim.create_indices(1, timer.with_dur(1200));
+    cells.get_pointer("pc").add_fade_out(timer.with_dur(200));
+    current_stage.add_text_change(timer.with_dur(700), "5: Traverse string forwards, adding LMS suffixes to the correct bucket");
+    var sa_anim = new TextAnimationItem(new TextAttributes("SA:", text_x, sa_y, 0, 0, "#880000", "lucida console", 20, "left"));
+    sa_anim.add_fade_in(timer.with_dur(200));
+    var sa = new AnimatedArray(sa_x, sa_y, text_font_size * 0.5, text_cell_size, "#111111").from_text("-".repeat(text_length));
+    sa.display(timer);
+    flying_chars = [];
+    for (var i = 0; i < lms_suffixes.length; i++) {
+        index = lms_suffixes[i];
+        text_anim.move_pointer_to("pc", index, timer.with_dur(500));
+        text_anim.perform_split_animation("pc",
+            function(x) { x.add_fade_out(timer.copy().with_dur(250)); },
+            function(x) {
+                x.add_colour_change(timer.copy().with_dur(250), "#ff0000");
+                x.add_colour_change(timer.from_relative(1600, 1800), "#000000");
+            } );
+        var tail_pointer = "tail_" + text[index];
+        cells.get_pointer(tail_pointer).add_twitch(timer.from_relative(800, 1500), -10);
+
+        // Copy the suffix and fly it into the correct location:
+        var duplicate_characters = text_anim.get_copy_of_animations_from_pointer("pc");
+
+        // Animate the duplicate characters:
+        var x = cells.get_cell_x_at_pointer(tail_pointer);
+        var y = cells.get_cell_y_at_pointer(tail_pointer);
+        fly_and_rotate_text(x, y, duplicate_characters, timer.from_relative(1200, 1800));
+        flying_chars = flying_chars.concat(duplicate_characters);
+
+        // Put this in the array:
+        sa.set_value_at(cells.pointer_to_index(tail_pointer), index, timer.from_relative(1250, 1800));
+        // Keep copy of flown text, in case we need to get rid of it later:
+        slots_to_suffix_strings[cells.pointer_to_index(tail_pointer)] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
+        // Move pointer:
+        cells.decrement_pointer(tail_pointer, false, timer.from_relative(1800, 2000));
+        timer.pause(2000);
+    }
+
+    // Put tail pointers back where they started:
+    for (var i = 0; i < tail_pointer_names.length; i++) {
+        cells.pop_pointer(tail_pointer_names[i], timer.with_trans_dur(300));
+    }
+    timer.pause(300);
+    
+    // STAGE SIX:
+    current_stage.add_text_change(timer.with_dur(700), "6: Induced sorting - forward pass");
+    text_anim.add_fade_in(timer.with_trans_dur(500));
+    cells.add_colour_change(timer.with_trans_dur(500), "#cccccc");
+    text_anim.get_pointer("pc").add_fade_out(timer.with_trans_dur(500));
+    sa.create_pointer("pc", 1.3, timer.with_dur(500), -1, "#ff0000", 1.5);
+    for (var j = 0; j < text_length; j++) {
+        sa.increment_pointer("pc", true, timer.with_dur(300));
+        if (sa.value_at_pointer("pc") != "-") {
+            index = sa.value_at_pointer("pc");
+            if (index <= 0) {
+                continue;
             }
-            tails.push(index - 1);
-            bucket_indices[alphabet_chars[i]] = num_buckets;
-            num_buckets += 1;
+            text_anim.twitch_index(timer.with_dur(500), index);
+            text_anim.twitch_index(timer.with_trans_dur(500), index - 1);
+            text_anim.animel_at(index - 1).add_pulse(timer.with_trans_dur(800), "#ff0000");
+            l_or_s.animel_at(index - 1).add_pulse(timer.with_dur(800), "#ff0000");
+            if (!l_or_s.value_at(index - 1)) {
+                // Got an L-string:
+                l_or_s.animel_at(index - 1).add_twitch(timer.with_trans_dur(800), -40, 2);
+                text_anim.move_pointer_to("pc", index - 1, timer.with_dur(500));
+                text_anim.perform_split_animation("pc",
+                    function(x) { 
+                        x.add_fade_out(timer.copy().with_dur(250));
+                        x.add_fade_in(timer.from_relative(1600, 1800)); },
+                    function(x) {
+                        x.add_colour_change(timer.copy().with_dur(250), "#ff0000");
+                        x.add_colour_change(timer.from_relative(1600, 1800), "#000000");
+                    } );
+                timer.pause(500);
+                // Copy the suffix and fly it into the correct location:
+                var duplicate_characters = text_anim.get_copy_of_animations_from_index(index - 1);
+
+                // Animate the duplicate characters:
+                var head_pointer =  "head_" + text[index - 1];
+                cells.get_pointer(head_pointer).add_twitch(timer.with_dur(500), -10);
+                var sa_position = cells.pointer_to_index(head_pointer);
+                if (slots_to_suffix_strings[sa_position] != null) {
+                    slots_to_suffix_strings[sa_position].explode(timer.with_trans_dur(1500));
+                }
+
+                var x = cells.get_cell_x_at_pointer(head_pointer);
+                var y = cells.get_cell_y_at_pointer(head_pointer);
+                fly_and_rotate_text(x, y, duplicate_characters, timer.with_dur(600));
+                // Keep copy of flown text, in case we need to get rid of it later:
+                slots_to_suffix_strings[sa_position] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
+
+                flying_chars = flying_chars.concat(duplicate_characters);
+                sa.set_value_at(cells.pointer_to_index(head_pointer), index - 1, timer.with_dur(300));
+                cells.increment_pointer(head_pointer, false, timer.with_dur(300));
+                timer.pause(1000);
+            }
         }
     }
-    for (var i = 0; i < alphabet.length; i++) {
-        alphabet[i].add_fade_out_dep(time_offset + speed * 2000, time_offset + speed * 3000);
-        count_chars[i].add_fade_out_dep(time_offset + speed * 2000, time_offset + speed * 3000);
+
+    // STAGE SEVEN:
+    current_stage.add_text_change(timer.with_dur(700), "7: Induced sorting - backward pass");
+    for (var j = text_length - 1; j >= 0; j--) {
+        if (sa.value_at_pointer("pc") != "-") {
+            index = sa.value_at_pointer("pc");
+            console.log(index);
+            if (index - 1 < 0) {
+                sa.decrement_pointer("pc", true, timer.with_dur(300));
+                continue;
+            }
+            text_anim.twitch_index(timer.with_dur(500), index);
+            text_anim.twitch_index(timer.with_trans_dur(500), index - 1);
+            text_anim.animel_at(index - 1).add_pulse(timer.with_trans_dur(800), "#ff0000");
+            l_or_s.animel_at(index - 1).add_pulse(timer.with_dur(800), "#ff0000");
+            if (l_or_s.value_at(index - 1)) {
+                // Got an S-string:
+                l_or_s.animel_at(index - 1).add_twitch(timer.with_trans_dur(800), -40, 2);
+                text_anim.move_pointer_to("pc", index - 1, timer.with_dur(500));
+                text_anim.perform_split_animation("pc",
+                    function(x) { 
+                        x.add_fade_out(timer.copy().with_dur(250));
+                        x.add_fade_in(timer.from_relative(1600, 1800)); },
+                    function(x) {
+                        x.add_colour_change(timer.copy().with_dur(250), "#ff0000");
+                        x.add_colour_change(timer.from_relative(1600, 1800), "#000000");
+                    } );
+                timer.pause(500);
+                // Copy the suffix and fly it into the correct location:
+                var duplicate_characters = text_anim.get_copy_of_animations_from_index(index - 1);
+
+                // Animate the duplicate characters:
+                var tail_pointer =  "tail_" + text[index - 1];
+                cells.get_pointer(tail_pointer).add_twitch(timer.with_dur(500), -10);
+                var sa_position = cells.pointer_to_index(tail_pointer);
+                if (slots_to_suffix_strings[sa_position] != null) {
+                    slots_to_suffix_strings[sa_position].explode(timer.with_trans_dur(1500));
+                }
+                var x = cells.get_cell_x_at_pointer(tail_pointer);
+                var y = cells.get_cell_y_at_pointer(tail_pointer);
+                fly_and_rotate_text(x, y, duplicate_characters, timer.with_dur(600));
+                // Keep copy of flown text, in case we need to get rid of it later:
+                slots_to_suffix_strings[sa_position] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
+
+                flying_chars = flying_chars.concat(duplicate_characters);
+                sa.set_value_at(cells.pointer_to_index(tail_pointer), index - 1, timer.with_dur(300));
+                cells.decrement_pointer(tail_pointer, false, timer.with_dur(300));
+                timer.pause(1000);
+            }
+        }
+        sa.decrement_pointer("pc", true, timer.with_dur(300));
     }
 
-    var heads_anim = new TextAnimationItem(new TextAttributes("HEADS:", 30, 210, 0, 0, "#008800", "lucida console", 20, "left"));
-    var tails_anim = new TextAnimationItem(new TextAttributes("TAILS:", 30, 230, 0, 0, "#000088", "lucida console", 20, "left"));
-    var sa_anim = new TextAnimationItem(new TextAttributes("SA:", 30, 290, 0, 0, "#880000", "lucida console", 20, "left"));
-    heads_anim.add_fade_in_dep(time_offset + speed * 2500, time_offset + speed * 3000);
-    tails_anim.add_fade_in_dep(time_offset + speed * 2500, time_offset + speed * 3000);
-    sa_anim.add_fade_in_dep(time_offset + speed * 2500, time_offset + speed * 3000);
-    var tc_ht = new TextAttributes("v", 500, 500, 0, 0, "#ff0000", "lucida console", 20, "right");
-    var heads_pointers = [];
-    var tails_pointers = [];
-    var suffix_array = Array(text.length).fill(-1);
+    // STAGE EIGHT:
+    timer.speed = 1.0;
+    current_stage.add_text_change(timer.with_dur(700), "8: Create summary string");
 
-    for (var i = 0; i < tails.length; i++) {
-        var head_pointer = new TextAnimationItem(tc_ht.with_colour("#00aa00").with_position(130 + heads[i] * 20, 210), new  AnimationProfile("linear"));
-        head_pointer.add_fade_in_dep(time_offset + speed * 2500, time_offset + speed * 3500);
-        heads_pointers.push(head_pointer);
-
-        var tail_pointer = new TextAnimationItem(tc_ht.with_colour("#0000aa").with_position(130 + tails[i] * 20, 230), new  AnimationProfile("linear"));
-        tail_pointer.add_fade_in_dep(time_offset + speed * 2500, time_offset + speed * 3500);
-        tails_pointers.push(tail_pointer);
-    }
-
-    var ta_digit = new TextAttributes("x", 500, 500, 0, 0, "#111111", "verdana", 12, "right");
-    //create_text_wipe(suffix_array_chars, "-".repeat(text.length), 130, 290, "#880000", time_offset, speed);
-    var char_labels = [];
-    var suffix_array_chars = [];
-    for (var i = 0; i < text.length; i++) {
-        var digit = new TextAnimationItem(ta_digit.with_position(25 + i * 20, 160).with_text(String(i)));
-        digit.add_fade_in_dep(time_offset, time_offset + speed * 50 * i);
-        char_labels.push(digit);
-        var sa = new TextAnimationItem(ta_digit.with_position(125 + i * 20, 280).with_text("-"));
-        sa.add_fade_in_dep(time_offset, time_offset + speed * 50 * i);
-        suffix_array_chars.push(sa);
-    }
-    //create_text_wipe()
-*/
     // Collect all animation items together:
-    full_animation = text_anim.get_animated_elements().concat(l_or_s.get_animated_elements()).concat(alphabet.get_animated_elements()).concat(counts.get_animated_elements()).concat(links).concat(cells.get_animated_elements());
+    full_animation = text_anim.get_animated_elements()
+        .concat(l_or_s.get_animated_elements())
+        .concat(alphabet.get_animated_elements())
+        .concat(counts.get_animated_elements())
+        .concat(links)
+        .concat(cells.get_animated_elements())
+        .concat(sa.get_animated_elements())
+        .concat(flying_chars);
     full_animation.push(explanation);
     full_animation.push(current_stage);
     full_animation.push(heads_anim);
