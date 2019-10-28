@@ -1,14 +1,15 @@
 function draw(animation_items, timestamp) {
-    var ctx = document.getElementById('canvas').getContext('2d');
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
     ctx.globalCompositeOperation = 'destination-over';
-    ctx.clearRect(0,0,1200,1000);
+    ctx.clearRect(0, 0, canvas.scrollWidth, canvas.scrollHeight);
 
     for (var i = 0; i < animation_items.length; i++) {
         anim = animation_items[i];
         anim.draw(ctx, timestamp);
     }
 
-    window.requestAnimationFrame(function(timestamp) { draw(animation_items, timestamp); });
+    window.requestAnimationFrame(function(timestamp) { draw(animation_items, get_animation_time(timestamp)); });
 }
 
 class AnimationPhase {
@@ -118,6 +119,11 @@ class TextAnimationItem {
     add_moveto(timer, xpos, ypos, rot=0) {
         var last_atts = this.latest_text_atts();
         this.add_animation(timer, last_atts.with_position(xpos, ypos, rot));
+        return this;
+    }
+    add_moveto_resize(timer, new_size, xpos, ypos, rot=0) {
+        var last_atts = this.latest_text_atts();
+        this.add_animation(timer, last_atts.with_position(xpos, ypos, rot).with_size(new_size));
         return this;
     }
     add_pulse_dep(start_time, end_time, colour) {
@@ -282,6 +288,9 @@ class TextAttributes {
     with_size(size) {
         return new TextAttributes(this.txt, this.x, this.y, this.rot, this.opacity, this.colour, this.font, size, this.alignment);
     }
+    with_alignment(alignment) {
+        return new TextAttributes(this.txt, this.x, this.y, this.rot, this.opacity, this.colour, this.font, this.size, alignment);
+    }
 }
 
 class TimeController {
@@ -367,6 +376,7 @@ class AnimatedArray {
         this.index_elements = [];
         this.pointer_speed = 200;
         this.pointer_stacks = new Map();
+        this.removed_animels = [];
     }
     from_text(text) {
         this.length = text.length;
@@ -387,6 +397,52 @@ class AnimatedArray {
         this.arr = new Array(animels.length);
         return this;
     }
+    get_as_text() {
+        var text = "";
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            text += this.animated_elements[i].get_text();
+        }
+        return text;
+    }
+    adopt_animel(animel, index, timer) {
+        if (this.animated_elements.length == 0) {
+            var blank_ta = new TextAttributes("", 0, 0, 0, 0, "#ffffff");
+            this.animated_elements = new Array(this.length).fill(new TextAnimationItem(blank_ta));
+        }
+
+        var ta = animel.latest_text_atts().with_alignment("center").with_opacity(0).with_colour(this.colour);
+        var animel_copy = new TextAnimationItem(ta);
+        animel_copy.add_fade_in(timer.from(timer.get_start_time(), timer.get_mid_time()));
+        var cell_x = this.x + index * this.cell_size;
+        var cell_y = this.y;
+        animel_copy.add_moveto_resize(timer.from(timer.get_mid_time(), timer.get_end_time()), this.char_size, cell_x, cell_y, 0);
+        this.animated_elements[index] = animel_copy;
+        this.arr[index] = animel_copy.get_text();
+    }
+    remove_gaps(timer) {
+        var index = 0;
+        for (var i = 0; i < this.length; i++) {
+            if (this.arr[i]) {
+                // Move animel:
+                console.log("Moving", i, "to", index);
+                this.animated_elements[i].add_moveto(timer.copy(), this.x + index * this.cell_size, this.y);
+                if (index != i) {
+                    this.animated_elements[index] = this.animated_elements[i];
+                    this.removed_animels.push(this.animated_elements[i]);
+                    this.animated_elements[i] = null;
+                    this.arr[index] = this.arr[i];
+                    this.arr[i] = null;
+                }
+                index++;
+            }
+        }
+        console.log("Setting length to", index);
+        console.log(this.animated_elements);
+        this.length = index;
+        this.animated_elements.length = index;
+        this.arr.length = index;
+        timer.update();
+    }
     create_pointer(name, line_offset = -1, timer, start_location=-1, colour="#ff0000", char_scale = 0.6) {
         var char = (line_offset > 0) ? "^" : "v";
         var ta = new TextAttributes(char, this.x + start_location * this.cell_size, this.y + this.char_size * line_offset, 0, 0, colour, font="lucida console", size=this.char_size*char_scale, alignment="center");
@@ -405,10 +461,8 @@ class AnimatedArray {
         this.pointer_stacks.get(name).push(this.pointer_locations.get(name));
     }
     pop_pointer(name, timer) {
-        console.log(name, " pop!");
         if (this.pointer_stacks.has(name)) {
             var index = this.pointer_stacks.get(name).pop();
-            console.log("Previous index:", index);
             this.move_pointer_to(name, index, timer);
         }
     }
@@ -421,22 +475,31 @@ class AnimatedArray {
             this.index_elements.push(digit);
         }
     }
-    get_copy_of_animations_from_index(index) {
+    get_copy_of_animations_from_index(index, transformer=null) {
         var copied_elements = [];
         for (var i = index; i < this.animated_elements.length; i++) {
             var ta = this.animated_elements[i].latest_text_atts();
+            if (transformer) {
+                ta = transformer(ta);
+            }
             var flyer = new TextAnimationItem(ta.with_opacity(0), new AnimationProfile("cheeky", 0.3));
             copied_elements.push(flyer);
         }
         return copied_elements;
     }
-    get_copy_of_animations_from_pointer(name) {
+    get_copy_of_animations_from_pointer(name, transformer=null) {
         var index = this.pointer_locations.get(name);
-        return this.get_copy_of_animations_from_index(index);
+        return this.get_copy_of_animations_from_index(index, transformer);
     }
     set_value_at(index, value, timer) {
         this.arr[index] = value;
         this.animated_elements[index].add_text_change(timer, String(value));
+    }
+    set_validated_value_at(index, value, ground_truth, timer) {
+        this.arr[index] = value;
+        this.animated_elements[index].add_text_change(timer, String(value));
+        var colour = (value == ground_truth) ? "#008800" : "#ff0000";
+        this.animated_elements[index].add_colour_change(timer.with_trans_dur(300), colour);
     }
     perform_split_animation(pointer_name, func_left, func_right) {
         var index = this.pointer_locations.get(pointer_name);
@@ -448,14 +511,23 @@ class AnimatedArray {
             }
         }
     }
+    perform_substr_split(index_left, index_right, func_in, func_out) {
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            if (i < index_left || i >= index_right) {
+                func_out(this.animated_elements[i]);
+            } else {
+                func_in(this.animated_elements[i]);
+            }
+        }
+    }
     reset_positions(timer) {
         for (var i = 0; i < this.animated_elements.length; i++) {
-            this.animated_elements[i].add_moveto(timer.copy(), this.x + i * this.cell_size, this.y, 0);
+            this.animated_elements[i].add_moveto_resize(timer.copy(), this.char_size, this.x + i * this.cell_size, this.y, 0);
         }
         timer.update();
     }
     get_animated_elements() {
-        return this.animated_elements.concat(this.index_elements).concat(Array.from(this.pointers.values()));
+        return this.animated_elements.concat(this.index_elements).concat(this.removed_animels).concat(Array.from(this.pointers.values()));
     }
     animel_at(index) {
         return this.animated_elements[index];
@@ -493,7 +565,6 @@ class AnimatedArray {
     move_pointer_to(name, index, timer) {
         var pointer = this.pointers.get(name);
         if (pointer) {
-            console.log("MOVING POINTER!?");
             this.pointer_locations.set(name, index);
             pointer.add_moveto(timer, this.x + index * this.cell_size, this.y + this.char_size * this.pointer_line_offsets.get(name));
         }
@@ -529,7 +600,6 @@ class AnimatedArray {
         timer.update();
     }
     display(timer) {
-        console.log("Creating text wipe from ", this.arr);
         return create_text_wipe(this.animated_elements, this.arr, this.x, this.y, this.colour, timer, this.cell_size, this.char_size);
     }
     fill_blank(timer) {
@@ -551,6 +621,12 @@ class AnimatedArray {
         }
         timer.update();
     }
+    add_fade_out(timer) {
+        for (var i = 0; i < this.animated_elements.length; i++) {
+            this.animated_elements[i].add_fade_out(timer.copy());
+        }
+        timer.update();
+    }
     add_colour_change(timer, colour) {
         for (var i = 0; i < this.animated_elements.length; i++) {
             this.animated_elements[i].add_colour_change(timer.copy(), colour);
@@ -561,6 +637,18 @@ class AnimatedArray {
         if (this.index_elements.length > index && index >= 0) {
             this.index_elements[index].add_twitch(timer, 10);
         }
+    }
+    twitch_at_pointer(timer, name) {
+        var animel = this.animel_at_pointer(name);
+        if (animel) {
+            animel.add_twitch(timer, 10);
+        }
+    }
+    get_index_animel(index) {
+        if (this.index_elements && this.index_elements.length > index && index >= 0) {
+            return this.index_elements[index];
+        }
+        return null;
     }
 }
 
@@ -647,28 +735,97 @@ function fly_and_rotate_text(dest_x, dest_y, characters, timer) {
     var gap = spread_time / characters.length;
     for (var j = 0; j < characters.length; j++) {
         var new_y = 54 + dest_y + j * 12;
-        var ta_destination = new TextAttributes(characters[j].get_text(), dest_x - 7, new_y, -90, 1.0, "#004400", "lucida console", 18, "center");
+        
+        //new TextAttributes(characters[j].get_text(), dest_x - 7, new_y, -90, 1.0, "#004400", "lucida console", 18, "center");
         var start_time = characters.length - j * gap;
         characters[j].add_fade_in(timer.from_relative(start_time, start_time + 1));
+        var ta_start = characters[j].latest_text_atts();
+        var ta_destination = ta_start.with_position(dest_x - 7, new_y, -90).with_size(18);
         characters[j].add_animation(timer.from_relative(start_time + 2, start_time + post_gap), ta_destination);
     }
     timer.update();
 }
 
+function brute_force_suffix_array(text) {
+    suffixes = [];
+    for (var i = 0; i < text.length; i++) {
+        suffixes.push(text.substr(i));
+    }
+    suffixes.sort();
+    indices = [];
+    for (var i = 0; i < text.length; i++) {
+        indices.push(text.length - suffixes[i].length);
+    }
+    return indices;
+}
+
+var speed = 1.0;
+var last_timestamp = null;
+var animation_timestamp = 0;
+var paused = false;
+var fast_forward_speed = 1.0;
+
+function get_animation_time(timestamp) {
+    var delta = paused ? 0 : timestamp - last_timestamp;
+    last_timestamp = timestamp;
+    animation_timestamp += delta * speed;
+    return animation_timestamp;
+}
+
+window.addEventListener("keydown", function(event){
+    this.console.log(event);
+    if (event.code === "BracketRight") {
+        speed += event.shiftKey ? 1 : 0.1;
+    } else if (event.code === "BracketLeft") {
+        speed -= event.shiftKey ? 1 : 0.1;
+        if (speed < 0) {
+            speed = 0.1;
+        }
+    } else if (event.code === "Space") {
+        paused = !paused;
+        event.preventDefault();
+    } else if (event.code === "Enter") {
+        if (speed > 1) {
+            fast_forward_speed = speed;
+            speed = 1;
+        } else {
+            if (fast_forward_speed <= 1) {
+                fast_forward_speed = 20;
+            }
+            speed = fast_forward_speed;
+        }
+        event.preventDefault();
+    }
+});
+
 window.addEventListener("load", function(){
-    //old_method();
-    //return;
+    var text = "ooohoohohohohooohhhhoo$";
+    var timer = new TimeController(1, "main");
+    var sa = create_animation(text, timer);
+    var animels = sa["animation"];
+    var summary = sa["summary"];
 
-    timer = new TimeController(1, "main");
+    var saII = create_animation(summary + "$", timer);
 
-    var text = "mmiissiissiippii$";
+    animels=animels.concat(saII["animation"]);
+    window.requestAnimationFrame(function(timestamp) { draw(animels, get_animation_time(timestamp)); });
+});
+
+function create_animation(text, timer) {
+    //var text = "mmiissiissiippii$";
     //var text = "cabbage$";
+    //var text = "baabaabac$";
+    var ground_truth = brute_force_suffix_array(text);
+
     var text_length = text.length;
 
     var text_x = 40;
     var text_y = 150;
     var text_cell_size = 30;
     var text_font_size = 30;
+
+    var summary_x = text_x;
+    var summary_y = text_y + 60;
 
     var explanation_x = 10;
     var explanation_y = 180;
@@ -685,6 +842,9 @@ window.addEventListener("load", function(){
     var sa_y = cells_y + 30;
     var sa_x = cells_x;
 
+    var lms_substring_names_x = 10;
+    var lms_substring_names_y = sa_y + text_length * 16;
+
     var text_anim = new AnimatedArray(text_x, text_y, text_font_size, text_cell_size, "#000000").from_text(text);
     text_anim.display(timer);
 
@@ -692,11 +852,11 @@ window.addEventListener("load", function(){
     l_or_s.fill_blank(timer);
 
     explanation = new TextAnimationItem(new TextAttributes("", explanation_x, explanation_y, 0, 1.0, "#222222", font="undefined", size=20, alignment="left"));
-    text_anim.create_pointer("pc", -2.8, timer.with_dur(500), text_length - 1);
-
+    var misc_animels = [];
     // STAGE ONE
-    current_stage = new TextAnimationItem(new TextAttributes("1: Traverse string backwards, labelling characters as L(larger) or S(smaller)", stage_title_x, stage_title_y, 0, 1.0, "#111111", font=undefined, size=20, alignment="left"));
-
+    current_stage = new TextAnimationItem(new TextAttributes("1: Traverse string backwards, labelling characters as L(larger) or S(smaller)", stage_title_x, stage_title_y, 0, 0, "#111111", font=undefined, size=20, alignment="left"));
+    current_stage.add_fade_in(timer.with_dur(500));
+    text_anim.create_pointer("pc", -2.8, timer.with_dur(500), text_length - 1);
     for (var i = text_length - 1; i >=0; i--) {
         var isS = true;
         if (i < text_length - 1) {
@@ -732,11 +892,15 @@ window.addEventListener("load", function(){
     l_or_s.create_pointer("pc", -1.4, timer.with_dur(500), 0);
 
     var lms_suffixes = [];
+    var is_lms_suffix = [];
     for (var i = 0; i < text_length; i++) {
         if (l_or_s.value_at(i) && (i == 0 || !l_or_s.value_at(i-1))) {
             l_or_s.animel_at(i).add_offset(timer.with_dur(200), 0, -5);
             l_or_s.animel_at(i).add_colour_change(timer.with_trans_dur(300), "#ff4444");
             lms_suffixes.push(i);
+            is_lms_suffix.push(true);
+        } else {
+            is_lms_suffix.push(false);
         }
         l_or_s.increment_pointer("pc", true, timer.with_dur(500));
     }
@@ -805,6 +969,7 @@ window.addEventListener("load", function(){
         }
         alphabet.increment_pointer("pc", false, timer.with_dur(100));
     }
+    timer.pause(1000);
 
     // STAGE FIVE
     slots_to_suffix_strings = new Array(text_length);
@@ -832,7 +997,7 @@ window.addEventListener("load", function(){
         cells.get_pointer(tail_pointer).add_twitch(timer.from_relative(800, 1500), -10);
 
         // Copy the suffix and fly it into the correct location:
-        var duplicate_characters = text_anim.get_copy_of_animations_from_pointer("pc");
+        var duplicate_characters = text_anim.get_copy_of_animations_from_pointer("pc", function(ta) { return ta.with_colour("#ff0000"); });
 
         // Animate the duplicate characters:
         var x = cells.get_cell_x_at_pointer(tail_pointer);
@@ -841,9 +1006,10 @@ window.addEventListener("load", function(){
         flying_chars = flying_chars.concat(duplicate_characters);
 
         // Put this in the array:
-        sa.set_value_at(cells.pointer_to_index(tail_pointer), index, timer.from_relative(1250, 1800));
+        var dest_index = cells.pointer_to_index(tail_pointer);
+        sa.set_validated_value_at(dest_index, index, ground_truth[dest_index], timer.from_relative(1250, 1800));
         // Keep copy of flown text, in case we need to get rid of it later:
-        slots_to_suffix_strings[cells.pointer_to_index(tail_pointer)] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
+        slots_to_suffix_strings[dest_index] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
         // Move pointer:
         cells.decrement_pointer(tail_pointer, false, timer.from_relative(1800, 2000));
         timer.pause(2000);
@@ -886,7 +1052,8 @@ window.addEventListener("load", function(){
                     } );
                 timer.pause(500);
                 // Copy the suffix and fly it into the correct location:
-                var duplicate_characters = text_anim.get_copy_of_animations_from_index(index - 1);
+                var transformer = (is_lms_suffix[index - 1]) ? function(ta) { return ta.with_colour("#ff0000"); } : null;
+                var duplicate_characters = text_anim.get_copy_of_animations_from_index(index - 1, transformer);
 
                 // Animate the duplicate characters:
                 var head_pointer =  "head_" + text[index - 1];
@@ -903,7 +1070,7 @@ window.addEventListener("load", function(){
                 slots_to_suffix_strings[sa_position] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
 
                 flying_chars = flying_chars.concat(duplicate_characters);
-                sa.set_value_at(cells.pointer_to_index(head_pointer), index - 1, timer.with_dur(300));
+                sa.set_validated_value_at(sa_position, index - 1, ground_truth[sa_position], timer.with_dur(300));
                 cells.increment_pointer(head_pointer, false, timer.with_dur(300));
                 timer.pause(1000);
             }
@@ -915,7 +1082,6 @@ window.addEventListener("load", function(){
     for (var j = text_length - 1; j >= 0; j--) {
         if (sa.value_at_pointer("pc") != "-") {
             index = sa.value_at_pointer("pc");
-            console.log(index);
             if (index - 1 < 0) {
                 sa.decrement_pointer("pc", true, timer.with_dur(300));
                 continue;
@@ -938,7 +1104,8 @@ window.addEventListener("load", function(){
                     } );
                 timer.pause(500);
                 // Copy the suffix and fly it into the correct location:
-                var duplicate_characters = text_anim.get_copy_of_animations_from_index(index - 1);
+                var transformer = (is_lms_suffix[index - 1]) ? function(ta) { return ta.with_colour("#ff0000"); } : null;
+                var duplicate_characters = text_anim.get_copy_of_animations_from_index(index - 1, transformer);
 
                 // Animate the duplicate characters:
                 var tail_pointer =  "tail_" + text[index - 1];
@@ -954,7 +1121,7 @@ window.addEventListener("load", function(){
                 slots_to_suffix_strings[sa_position] = new AnimatedArray(0, 0, 10, 10, 0).from_animels(duplicate_characters);
 
                 flying_chars = flying_chars.concat(duplicate_characters);
-                sa.set_value_at(cells.pointer_to_index(tail_pointer), index - 1, timer.with_dur(300));
+                sa.set_validated_value_at(sa_position, index - 1, ground_truth[sa_position], timer.with_dur(300));
                 cells.decrement_pointer(tail_pointer, false, timer.with_dur(300));
                 timer.pause(1000);
             }
@@ -963,8 +1130,65 @@ window.addEventListener("load", function(){
     }
 
     // STAGE EIGHT:
-    timer.speed = 1.0;
+    var last_lms_substring = null;
+    var lms_substring_count = 0;
+    var lms_name = -1;
+    summary_string = new AnimatedArray(summary_x, summary_y, 16, text_cell_size, "#777777").from_array(new Array(text_length));
     current_stage.add_text_change(timer.with_dur(700), "8: Create summary string");
+    for (var i = 0; i < text_length; i++) {
+        var index = sa.value_at_pointer("pc");
+        if (is_lms_suffix[index]) {
+            sa.animel_at_pointer("pc").add_pulse(timer.with_trans_dur(500), "#ff0000");
+            text_anim.get_index_animel(index).add_colour_change(timer.with_trans_dur(500), "#ff0000");
+            text_anim.move_pointer_to("pc", index, timer.with_dur(500));
+            var left_index = index;
+            var right_index = left_index + 1;
+            while (right_index + 1 < text_length && !is_lms_suffix[right_index]) {
+                right_index++;
+            }
+            lms_substring = [];
+            text_anim.perform_substr_split(left_index, right_index,
+                function(x) {
+                    var ta = x.latest_text_atts();
+                    var animel = new TextAnimationItem(ta.with_opacity(0), new AnimationProfile("linear", 0.3));
+                    animel.add_fade_in(timer.from_relative(500,600));
+                    animel.add_
+                    animel.add_moveto_resize(timer.from_relative(600,1200), 20, lms_substring_names_x + lms_substring.length * 15, lms_substring_names_y + (lms_substring_count * 30));
+                    lms_substring.push(animel);
+                    x.add_colour_change(timer.copy().with_dur(200), "#ff0000");
+                    x.add_colour_change(timer.from_relative(1800, 2000), "#000000");
+                },
+                function(x) {
+                    x.add_colour_change(timer.copy().with_dur(200), "#dddddd");
+                    x.add_colour_change(timer.copy().from_relative(1800, 2000), "#000000");
+                });
+            flying_chars = flying_chars.concat(lms_substring);
+            var new_lms_substring = text.substr(left_index, right_index - left_index);
+            if (new_lms_substring != last_lms_substring) {
+                lms_name++;
+            }
+            last_lms_substring = new_lms_substring;
+            var ta = new TextAttributes(String(lms_name), 20 + lms_substring_names_x + text_length * 15, lms_substring_names_y + (lms_substring_count * 30), 0, 0, "#aaaaaa", "lucida console", 20, "center");
+            var name_animel = new TextAnimationItem(ta);
+            misc_animels.push(name_animel);
+            name_animel.add_fade_in(timer.from_relative(1500, 1800));
+
+            summary_string.adopt_animel(name_animel, index, timer.from_relative(1800, 2500));
+            lms_substring_count += 1;
+            timer.pause(2000);
+        }
+        sa.increment_pointer("pc", false, timer.with_dur(100));
+    }
+
+    //timer.speed = 1;
+
+    summary_string.x += 200;
+    summary_string.y += 30;
+    summary_string.remove_gaps(timer.with_dur(1000));
+    summary_string.add_colour_change(timer.with_trans_dur(200), "#000088");
+    var summary_string_title = new TextAnimationItem(new TextAttributes("SUMMARY STRING:", summary_x, summary_y + 30, 0, 0, "#000088", "lucida console", 20, "left"));
+    summary_string_title.add_fade_in(timer.with_dur(200));
+    misc_animels.push(summary_string_title);
 
     // Collect all animation items together:
     full_animation = text_anim.get_animated_elements()
@@ -974,14 +1198,33 @@ window.addEventListener("load", function(){
         .concat(links)
         .concat(cells.get_animated_elements())
         .concat(sa.get_animated_elements())
-        .concat(flying_chars);
+        .concat(flying_chars)
+        .concat(misc_animels);
     full_animation.push(explanation);
     full_animation.push(current_stage);
     full_animation.push(heads_anim);
     full_animation.push(tails_anim);
     full_animation.push(sa_anim);
-    window.requestAnimationFrame(function(timestamp) { draw(full_animation, timestamp); });
-});
+
+
+    var full = new AnimatedArray(0, 0, 10, 10, 0).from_animels(full_animation);
+    full.explode(timer.with_dur(1000));
+
+    full_animation = full_animation.concat(summary_string.get_animated_elements());
+    summary_string.x = text_x;
+    summary_string.y = text_y;
+    summary_string.add_colour_change(timer.with_dur(1000), "#000000");
+    summary_string.char_size = text_font_size;
+    summary_string.char_width = text_cell_size;
+    summary_string.reset_positions(timer.with_dur(1000));
+    for (var i = 0; i < summary_string.length; i++) {
+        console.log(summary_string.value_at(i));
+        summary_string.animel_at(i).add_text_change(timer.with_dur(500), String.fromCharCode(parseInt(summary_string.value_at(i)) + 'a'.charCodeAt(0)));
+    }
+    summary_string.add_fade_out(timer.with_dur(500));
+
+    return {"animation":full_animation, "summary":summary_string.get_as_text()};
+}
 
 function old_method() {
     var speed = 0.1;
