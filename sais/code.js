@@ -748,7 +748,8 @@ window.addEventListener("load", function(){
     var text = "mmiissiissiippii$"; // Test string in the original paper
     var text = "cabbage$";  // Test strings in the walk-through
     var text = "baabaabac$";
-    var text = "thepuddlewherethepoodledidthepiddle$";
+    var text = "ohbabybabyhowwasisupposedtoknow$";
+    //text = "thequickbrownfax$";
     var timer = new TimeController(1, "main");
     var results = create_animation(text, timer);
     var animels = results["animation"];
@@ -812,8 +813,38 @@ function create_animation(text, timer) {
     var misc_animels = [];
     var alphabet_chars = "$abcdefghijklmnopqrstuvwxyz";
 
+
     if (!check_for_duplicate_characters(text, alphabet_chars)) {
-        return {"animation":text_anim.get_animated_elements(), "sa":ground_truth};
+        var current_stage = new TextAnimationItem(new TextAttributes("1: No duplicate characters, so perform simple bucket sort", stage_title_x, stage_title_y, 0, 0, "#111111", font=undefined, size=20, alignment="left"));
+        current_stage.add_fade_in(timer.with_dur(500));
+        text_anim.create_pointer("pc", -1, timer.with_dur(500), -1);
+
+        var alphabet = new AnimatedArray(alphabet_x, alphabet_y, text_font_size, text_cell_size, "#bbaa44").from_text(alphabet_chars);
+        alphabet.display(timer);
+        var sa = new AnimatedArray(alphabet_x, alphabet_y + 40, text_font_size * 0.5, text_cell_size, "#000088").from_array(new Array(alphabet_chars.length));
+        text_anim.create_indices(1, timer.with_dur(500));
+        for (var i = 0; i < text_length; i++) {
+            text_anim.increment_pointer("pc", false, timer.with_trans_dur(500));
+            var char_value = 1 + text.charCodeAt(i) - 'a'.charCodeAt(0);
+            if (char_value < 0) {
+                char_value = 0; // "$" is less than "a".
+            }
+            alphabet.animel_at(char_value).add_pulse(timer.with_trans_dur(1000), "#ff0000");
+            text_anim.animel_at_pointer("pc").add_pulse(timer.with_trans_dur(1000), "#ff0000");
+            timer.pause(300);
+            sa.adopt_animel(text_anim.get_index_animel(i), char_value, timer.with_trans_dur(600));
+            timer.pause(300);
+        }
+        timer.pause(1000);
+
+        sa.x = summary_x + 200;
+        sa.y = summary_y + 80;
+        sa.char_size = 16;
+        sa.remove_gaps(timer.with_dur(1000));
+        return {
+            "animation":text_anim.get_animated_elements().concat(current_stage).concat(alphabet.get_animated_elements()).concat(sa.get_animated_elements()),
+            "sa":ground_truth
+        };
     }
 
     // STAGE ONE
@@ -1223,12 +1254,14 @@ function create_animation(text, timer) {
     var results = create_animation(ss, timer);
     full_animation = full_animation.concat(results["animation"]);
     var full_sub = new AnimatedArray(0, 0, 10, 10, 0).from_animels(results["animation"]);
+
+    var summary_sa = new AnimatedArray(summary_x + 200, summary_y + 80, 16, text_cell_size, "#000088").from_array(results["sa"]);
+    summary_sa.display(timer.with_dur(500));
+
     full_sub.explode(timer.with_dur(1000));
     full.unexplode(timer.with_dur(1000));
     console.log("Summary string SA:", results["sa"]);
 
-    var summary_sa = new AnimatedArray(summary_x + 200, summary_y + 80, 16, text_cell_size, "#000088").from_array(results["sa"]);
-    summary_sa.display(timer.with_dur(500));
     var summary_sa_title = new TextAnimationItem(new TextAttributes("SUMMARY SA:", summary_x, summary_y + 80, 0, 0, "#000088", "lucida console", 20, "left"));
     summary_sa_title.add_fade_in(timer.with_dur(200));
 
@@ -1236,7 +1269,7 @@ function create_animation(text, timer) {
     for (var i = 0; i < slots_to_suffix_strings.length; i++) {
         slots_to_suffix_strings[i].explode(timer.with_trans_dur(500));
         slots_to_suffix_strings[i] = null;
-        timer.pause(200);
+        timer.pause(100);
     }
     sa.fill(-1, "-", timer.with_dur(500));
 
@@ -1269,18 +1302,6 @@ function create_animation(text, timer) {
         var position = position_string.value_at(index);
         full_animation.push(create_link_animation(position_string.animel_at(index), text_anim.get_index_animel(position), timer.with_dur(500)));
  
-        /*
-        var lms_name = summary_string.value_at(index);
-        console.log("LMS_NAME:", lms_name)
-        full_animation.push(create_link_animation(summary_string.animel_at(index), lms_name_animels[lms_name], timer.with_dur(500)));
-        lms_name_animels[lms_name].add_pulse(timer.with_trans_dur(500), "#ff0000");
-        lms_position_animels[lms_name].add_pulse(timer.with_dur(500), "#ff0000");
-        timer.pause(400);
-        var position = parseInt(lms_position_animels[lms_name].get_text());
-        full_animation.push(create_link_animation(lms_position_animels[lms_name], text_anim.get_index_animel(position), timer.with_dur(500)));
-        text_anim.animel_at(position).add_pulse(timer.with_trans_dur(500), "#ff0000");
-        text_anim.get_index_animel(position).add_pulse(timer.with_dur(500), "#ff0000");
-        */
         text_anim.move_pointer_to("pc", position, timer.with_dur(100));
         text_anim.perform_split_animation("pc",
             function(x) { 
