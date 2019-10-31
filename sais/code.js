@@ -54,6 +54,7 @@ class TextAnimationItem {
         this.profile = profile;
         this.colour_profile = colour_profile;
         this.attribute_stack = [];
+        this.current_animation_index = 0;
     }
 
     push() {
@@ -142,13 +143,14 @@ class TextAnimationItem {
 
     get_atts_at_time(atts, timestamp) {
         var current_animation_phase = null;
-        for (var i = 0; i < this.animations.length; i++) {
+        for (var i = this.current_animation_index; i < this.animations.length; i++) {
             var anim = this.animations[i];
             if (anim.start_time <= timestamp) {
                 current_animation_phase = anim;
             }
             if (anim.start_time <= timestamp && anim.end_time >= timestamp) {
                 current_animation_phase = anim;
+                //this.current_animation_index = i;
                 break;
             }
         }
@@ -218,7 +220,9 @@ class TextAttributes {
         ctx.textAlign = this.alignment;
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate(-this.rot * (Math.PI / 180));
+        if (this.rot != 0) {
+            ctx.rotate(-this.rot * (Math.PI / 180));
+        }
         ctx.fillText(this.txt, 0, 0);
         ctx.restore();
     }
