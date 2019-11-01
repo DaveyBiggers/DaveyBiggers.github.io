@@ -1,4 +1,4 @@
-## Linear Suffix Array Construction by Almost Pure Induced-Sorting - The Movie
+# Linear Suffix Array Construction by Almost Pure Induced-Sorting - The Movie
 
 <script src="animation_framework.js"></script>
 <script src="code.js"></script>
