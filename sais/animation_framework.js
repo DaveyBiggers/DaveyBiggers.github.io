@@ -52,6 +52,15 @@ class TextAnimationItem {
         this.add_animation(timer, ta);
     }
 
+    clone(transformer=null, profile=new AnimationProfile("cheeky", 0.3)) {
+        var ta = this.latest_text_atts();
+        if (transformer) {
+            ta = transformer(ta);
+        }
+        var copied_animel = new TextAnimationItem(ta.with_opacity(0), profile);
+        return copied_animel;
+    }
+
     add_animation(timer, end_attributes) {
         var start_attributes = this.initial_textatts;
         if (this.animations.length > 0) {
@@ -314,6 +323,14 @@ class TimeController {
     get_mid_time() {
         return this.time + this.speed * 0.5 * this.duration_of_next_animation;
     }
+    accelerate_loop(index_min, index_max, loop_function) {
+        var start_speed = this.speed;
+        for (var i = index_min; i < index_max; i++) {
+            loop_function(i);
+            this.speed *= 0.8;
+        }
+        this.speed = start_speed;
+    }
 }
 
 class AnimatedArray {
@@ -366,14 +383,14 @@ class AnimatedArray {
         }
         return text;
     }
-    adopt_animel(animel, index, timer) {
+    adopt_animel(animel, index, timer, animation_profile=undefined) {
         if (this.animated_elements.length == 0) {
             var blank_ta = new TextAttributes("", 0, 0, 0, 0, "#ffffff");
             this.animated_elements = new Array(this.length).fill(new TextAnimationItem(blank_ta));
         }
 
         var ta = animel.latest_text_atts().with_alignment("center").with_opacity(0).with_colour(this.colour);
-        var animel_copy = new TextAnimationItem(ta);
+        var animel_copy = new TextAnimationItem(ta, profile=animation_profile);
         animel_copy.add_fade_in(timer.from(timer.get_start_time(), timer.get_mid_time()));
         var cell_x = this.x + index * this.cell_size;
         var cell_y = this.y;
@@ -435,14 +452,18 @@ class AnimatedArray {
         }
         timer.update();
     }
+    get_copy_of_animel(index, transformer=null) {
+        var ta = this.animated_elements[index].latest_text_atts();
+        if (transformer) {
+            ta = transformer(ta);
+        }
+        var copied_animel = new TextAnimationItem(ta.with_opacity(0), new AnimationProfile("cheeky", 0.3));
+        return copied_animel;
+    }
     get_copy_of_animations_from_index(index, transformer=null) {
         var copied_elements = [];
         for (var i = index; i < this.animated_elements.length; i++) {
-            var ta = this.animated_elements[i].latest_text_atts();
-            if (transformer) {
-                ta = transformer(ta);
-            }
-            var flyer = new TextAnimationItem(ta.with_opacity(0), new AnimationProfile("cheeky", 0.3));
+            var flyer = this.get_copy_of_animel(i, transformer);
             copied_elements.push(flyer);
         }
         return copied_elements;
