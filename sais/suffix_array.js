@@ -7,8 +7,10 @@ window.addEventListener("load", function(){
     var results = create_animation(text, timer);
     var animels = results["animation"];
     var suffix_array = results["sa"];
+    var break_points = timer.get_break_points();
     this.console.log(suffix_array);
-    window.requestAnimationFrame(function(timestamp) { draw(animels, get_animation_time(timestamp)); });
+    start_animation(animels, break_points);
+    //window.requestAnimationFrame(function(timestamp) { draw(animels, get_animation_time(timestamp, break_points)); });
 });
 
 function brute_force_suffix_array(text) {
@@ -81,6 +83,7 @@ function create_animation(text, timer) {
 
 
     if (!check_for_duplicate_characters(text, alphabet_chars)) {
+        timer.mark();
         var current_stage = new TextAnimationItem(new TextAttributes("1: No duplicate characters, so perform simple bucket sort", stage_title_x, stage_title_y, 0, 0, "#111111", font=undefined, size=20, alignment="left"));
         current_stage.add_fade_in(timer.with_dur(500));
         text_anim.create_pointer("pc", -1, timer.with_dur(500), -1);
@@ -106,6 +109,7 @@ function create_animation(text, timer) {
         sa.x = summary_x + 200;
         sa.y = summary_y + 80;
         sa.char_size = 16;
+        timer.mark();
         sa.remove_gaps(timer.with_dur(1000));
         return {
             "animation":text_anim.get_animated_elements().concat(current_stage).concat(alphabet.get_animated_elements()).concat(sa.get_animated_elements()),
@@ -148,6 +152,7 @@ function create_animation(text, timer) {
 
     // STAGE TWO
     timer.pause(500);
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "2: Traverse string forwards, finding left-most S characters (LMS)");
     l_or_s.create_pointer("pc", -1.4, timer.with_dur(500), 0);
 
@@ -167,6 +172,7 @@ function create_animation(text, timer) {
     l_or_s.get_pointer("pc").add_fade_out(timer.with_dur(500));
 
     // STAGE THREE
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "3: Traverse string, calculate bucket sizes");
     
     var alphabet = new AnimatedArray(alphabet_x, alphabet_y, text_font_size, text_cell_size, "#bbaa44").from_text(alphabet_chars);
@@ -192,6 +198,7 @@ function create_animation(text, timer) {
     }
 
     // STAGE FOUR
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "4: Create buckets, find heads and tails");
     var index = 0;
     var cells = [];
@@ -236,6 +243,7 @@ function create_animation(text, timer) {
     timer.pause(1000);
 
     // STAGE FIVE
+    timer.mark();
     var slots_to_suffix_strings = new Array(text_length);
     alphabet.explode(timer.with_trans_dur(700));
     counts.explode(timer.with_trans_dur(700));
@@ -286,6 +294,7 @@ function create_animation(text, timer) {
     timer.pause(300);
     
     // STAGE SIX:
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "6: Induced sorting - forward pass");
     text_anim.add_fade_in(timer.with_trans_dur(500));
     cells.add_colour_change(timer.with_trans_dur(500), "#cccccc");
@@ -342,6 +351,7 @@ function create_animation(text, timer) {
     }
 
     // STAGE SEVEN:
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "7: Induced sorting - backward pass");
     for (var j = text_length - 1; j >= 0; j--) {
         if (sa.value_at_pointer("pc") != "-") {
@@ -395,6 +405,7 @@ function create_animation(text, timer) {
     }
 
     // STAGE EIGHT:
+    timer.mark();
     var last_lms_substring = null;
     var lms_substring_count = 1;
     var lms_name = -1;
@@ -463,7 +474,7 @@ function create_animation(text, timer) {
         }
         sa.increment_pointer("pc", false, timer.with_dur(100));
     }
-
+    timer.mark();
     position_string.x += 200;
     position_string.y += 30;
     position_string.remove_gaps(timer.with_dur(1000));
@@ -500,6 +511,7 @@ function create_animation(text, timer) {
 
     var ss = summary_string.get_as_text();
 
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "9: Get Suffix Array for Summary String - Recurse!");
     timer.pause(1000);
 
@@ -516,6 +528,7 @@ function create_animation(text, timer) {
     summary_string_copy.add_fade_out(timer.with_dur(500));
 
     // Recurse!
+    timer.mark();
     ss = summary_string_copy.get_as_text();
     var results = create_animation(ss, timer);
     full_animation = full_animation.concat(results["animation"]);
@@ -604,6 +617,7 @@ function create_animation(text, timer) {
         cells.pop_pointer(tail_pointer_names[i], timer.with_trans_dur(300));
     }
 
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "10: Induce full suffix array from the summary string's suffix array - forward pass");
     sa.move_pointer_to("pc", -1, timer.with_dur(500));
 
@@ -660,6 +674,7 @@ function create_animation(text, timer) {
         }
     }
 
+    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "10: Induce full suffix array from the summary string's suffix array - back pass");
     for (var j = text_length - 1; j >= 0; j--) {
         if (sa.value_at_pointer("pc") != "-") {

@@ -262,9 +262,16 @@ class TimeController {
         this.speed = speed;
         this.time = 0;
         this.markers = [];
+        this.break_points = [];
         this.duration_of_next_animation = 0;
         this.skip_next_update = false;
         this.name = name;
+    }
+    mark() {
+        this.break_points.push(this.time);
+    }
+    get_break_points() {
+        return this.break_points;
     }
     push_time() {
         this.markers.push(this.time);
@@ -390,7 +397,7 @@ class AnimatedArray {
         }
 
         var ta = animel.latest_text_atts().with_alignment("center").with_opacity(0).with_colour(this.colour);
-        var animel_copy = new TextAnimationItem(ta, profile=animation_profile);
+        var animel_copy = new TextAnimationItem(ta, animation_profile);
         animel_copy.add_fade_in(timer.from(timer.get_start_time(), timer.get_mid_time()));
         var cell_x = this.x + index * this.cell_size;
         var cell_y = this.y;
@@ -694,47 +701,65 @@ function fly_and_rotate_text(dest_x, dest_y, characters, timer) {
     timer.update();
 }
 
-
-var speed = 1.0;
-var last_timestamp = null;
-var animation_timestamp = 0;
-var paused = false;
-var fast_forward_speed = 1.0;
-
-function get_animation_time(timestamp) {
-    var delta = paused ? 0 : timestamp - last_timestamp;
-    last_timestamp = timestamp;
-    animation_timestamp += delta * speed;
-    return animation_timestamp;
+class ReplayState {
+    constructor(break_points) {
+        this.speed = 1.0;
+        this.last_timestamp = null;
+        this.animation_timestamp = 0;
+        this.paused = false;
+        this.fast_forward_speed = 1.0;
+        this.section_index = 0;
+        this.break_points = break_points;
+    }
+    get_animation_time(timestamp) {
+        var delta = this.paused ? 0 : timestamp - this.last_timestamp;
+        this.last_timestamp = timestamp;
+        this.animation_timestamp += delta * this.speed;
+        if (this.break_points != null && this.break_points.length > this.section_index) {
+            //console.log(section_index, break_points[section_index], animation_timestamp);
+            if (this.animation_timestamp >= this.break_points[this.section_index]) {
+                this.speed = 1;
+                this.section_index++;
+            }
+        }
+        return this.animation_timestamp;
+    }
+    keyboard_event(event) {
+        console.log(event);
+        console.log(this);
+        if (event.code === "BracketRight") {
+            this.speed += event.shiftKey ? 1 : 0.1;
+        } else if (event.code === "BracketLeft") {
+            this.speed -= event.shiftKey ? 1 : 0.1;
+            if (this.speed < 0) {
+                this.speed = 0.1;
+            }
+        } else if (event.code === "Space") {
+            this.paused = !this.paused;
+            event.preventDefault();
+        } else if (event.code === "Enter") {
+            if (this.speed > 1) {
+                this.fast_forward_speed = this.speed;
+                this.speed = 1;
+            } else {
+                if (this.fast_forward_speed <= 1) {
+                    this.fast_forward_speed = 20;
+                }
+                this.speed = this.fast_forward_speed;
+            }
+            event.preventDefault();
+        }
+    }
 }
 
-window.addEventListener("keydown", function(event){
-    this.console.log(event);
-    if (event.code === "BracketRight") {
-        speed += event.shiftKey ? 1 : 0.1;
-    } else if (event.code === "BracketLeft") {
-        speed -= event.shiftKey ? 1 : 0.1;
-        if (speed < 0) {
-            speed = 0.1;
-        }
-    } else if (event.code === "Space") {
-        paused = !paused;
-        event.preventDefault();
-    } else if (event.code === "Enter") {
-        if (speed > 1) {
-            fast_forward_speed = speed;
-            speed = 1;
-        } else {
-            if (fast_forward_speed <= 1) {
-                fast_forward_speed = 20;
-            }
-            speed = fast_forward_speed;
-        }
-        event.preventDefault();
-    }
-});
+function start_animation(animels, break_points) {
+    var replay_state = new ReplayState(break_points);
+    window.addEventListener("keydown", function(event) { replay_state.keyboard_event(event); });
+    window.requestAnimationFrame(function(timestamp) { draw(animels, timestamp, replay_state); });
+}
 
-function draw(animation_items, timestamp) {
+function draw(animation_items, timestamp, replay_state) {
+    timestamp = replay_state.get_animation_time(timestamp);
     var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
     ctx.globalCompositeOperation = 'destination-over';
@@ -745,5 +770,5 @@ function draw(animation_items, timestamp) {
         anim.draw(ctx, timestamp);
     }
 
-    window.requestAnimationFrame(function(timestamp) { draw(animation_items, get_animation_time(timestamp)); });
+    window.requestAnimationFrame(function(timestamp) { draw(animation_items, timestamp, replay_state); });
 }
