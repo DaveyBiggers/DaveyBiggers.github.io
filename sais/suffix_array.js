@@ -120,6 +120,7 @@ function create_animation(text, timer) {
     // STAGE ONE
     var current_stage = new TextAnimationItem(new TextAttributes("1: Traverse string backwards, labelling characters as L(larger) or S(smaller)", stage_title_x, stage_title_y, 0, 0, "#111111", font=undefined, size=20, alignment="left"));
     current_stage.add_fade_in(timer.with_dur(500));
+    timer.mark();
     text_anim.create_pointer("pc", -2.8, timer.with_dur(500), text_length - 1);
     for (var i = text_length - 1; i >=0; i--) {
         var isS = true;
@@ -152,8 +153,8 @@ function create_animation(text, timer) {
 
     // STAGE TWO
     timer.pause(500);
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "2: Traverse string forwards, finding left-most S characters (LMS)");
+    timer.mark();
     l_or_s.create_pointer("pc", -1.4, timer.with_dur(500), 0);
 
     var lms_suffixes = [];
@@ -172,8 +173,8 @@ function create_animation(text, timer) {
     l_or_s.get_pointer("pc").add_fade_out(timer.with_dur(500));
 
     // STAGE THREE
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "3: Traverse string, calculate bucket sizes");
+    timer.mark();
     
     var alphabet = new AnimatedArray(alphabet_x, alphabet_y, text_font_size, text_cell_size, "#bbaa44").from_text(alphabet_chars);
     alphabet.display(timer);
@@ -198,8 +199,8 @@ function create_animation(text, timer) {
     }
 
     // STAGE FOUR
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "4: Create buckets, find heads and tails");
+    timer.mark();
     var index = 0;
     var cells = [];
     var tail_pointer_names = [];
@@ -243,7 +244,6 @@ function create_animation(text, timer) {
     timer.pause(1000);
 
     // STAGE FIVE
-    timer.mark();
     var slots_to_suffix_strings = new Array(text_length);
     alphabet.explode(timer.with_trans_dur(700));
     counts.explode(timer.with_trans_dur(700));
@@ -251,6 +251,7 @@ function create_animation(text, timer) {
     text_anim.create_indices(1, timer.with_dur(1200));
     cells.get_pointer("pc").add_fade_out(timer.with_dur(200));
     current_stage.add_text_change(timer.with_dur(700), "5: Traverse string forwards, adding LMS suffixes to the correct bucket");
+    timer.mark();
     var sa_anim = new TextAnimationItem(new TextAttributes("SA:", text_x, sa_y, 0, 0, "#880000", "lucida console", 20, "left"));
     sa_anim.add_fade_in(timer.with_dur(200));
     var sa = new AnimatedArray(sa_x, sa_y, text_font_size * 0.5, text_cell_size, "#111111").from_text("-".repeat(text_length));
@@ -294,8 +295,8 @@ function create_animation(text, timer) {
     timer.pause(300);
     
     // STAGE SIX:
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "6: Induced sorting - forward pass");
+    timer.mark();
     text_anim.add_fade_in(timer.with_trans_dur(500));
     cells.add_colour_change(timer.with_trans_dur(500), "#cccccc");
     text_anim.get_pointer("pc").add_fade_out(timer.with_trans_dur(500));
@@ -351,8 +352,8 @@ function create_animation(text, timer) {
     }
 
     // STAGE SEVEN:
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "7: Induced sorting - backward pass");
+    timer.mark();
     for (var j = text_length - 1; j >= 0; j--) {
         if (sa.value_at_pointer("pc") != "-") {
             index = sa.value_at_pointer("pc");
@@ -405,13 +406,13 @@ function create_animation(text, timer) {
     }
 
     // STAGE EIGHT:
-    timer.mark();
     var last_lms_substring = null;
     var lms_substring_count = 1;
     var lms_name = -1;
     var summary_string = new AnimatedArray(summary_x, summary_y, 16, text_cell_size, "#777777").from_array(new Array(text_length));
     var position_string = new AnimatedArray(summary_x, summary_y + 20, 16, text_cell_size, "#aa77aa").from_array(new Array(text_length));
     current_stage.add_text_change(timer.with_dur(700), "8: Create summary string");
+    timer.mark();
 
     var lms_substring_title = new TextAnimationItem(new TextAttributes("SUBSTRING:", lms_substring_names_x, lms_substring_names_y, 0, 0, "#000088", "lucida console", 15, "left"));
     var lms_name_title = new TextAnimationItem(new TextAttributes("LMS NAME:", lms_substring_names_x + text_length * 15, lms_substring_names_y, 0, 0, "#000088", "lucida console", 15, "left"));
@@ -511,8 +512,8 @@ function create_animation(text, timer) {
 
     var ss = summary_string.get_as_text();
 
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "9: Get Suffix Array for Summary String - Recurse!");
+    timer.mark();
     timer.pause(1000);
 
     var full = new AnimatedArray(0, 0, 10, 10, 0).from_animels(full_animation);
@@ -617,8 +618,8 @@ function create_animation(text, timer) {
         cells.pop_pointer(tail_pointer_names[i], timer.with_trans_dur(300));
     }
 
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "10: Induce full suffix array from the summary string's suffix array - forward pass");
+    timer.mark();
     sa.move_pointer_to("pc", -1, timer.with_dur(500));
 
     text_anim.add_fade_in(timer.with_trans_dur(500));
@@ -674,8 +675,8 @@ function create_animation(text, timer) {
         }
     }
 
-    timer.mark();
     current_stage.add_text_change(timer.with_dur(700), "10: Induce full suffix array from the summary string's suffix array - back pass");
+    timer.mark();
     for (var j = text_length - 1; j >= 0; j--) {
         if (sa.value_at_pointer("pc") != "-") {
             index = sa.value_at_pointer("pc");
@@ -732,6 +733,7 @@ function create_animation(text, timer) {
     full_animation = full_animation.concat(summary_string_copy.get_animated_elements()).concat(summary_string.index_elements);
 
     full_animation.push(summary_sa_title);
+    timer.mark();
 
     return {"animation":full_animation, "sa":sa.arr};
 }

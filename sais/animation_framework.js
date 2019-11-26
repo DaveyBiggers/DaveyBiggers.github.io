@@ -35,7 +35,7 @@ class AnimationProfile {
 class TextAnimationItem {
     constructor(initial_textatts, profile=new AnimationProfile("linear"), colour_profile=new AnimationProfile("linear")) {
         this.animations = []
-        this.textatts = initial_textatts;
+        this.textatts = new TextAttributes(initial_textatts);
         this.initial_textatts = initial_textatts;
         this.profile = profile;
         this.colour_profile = colour_profile;
@@ -150,7 +150,7 @@ class TextAnimationItem {
             }
         }
         if (current_animation_phase == null) {
-            atts = this.textatts;
+            atts.interpolate(this.initial_textatts, this.initial_textatts, 1, 1)
         } else {
             var b = current_animation_phase.end_attributes;
             var a = current_animation_phase.start_attributes;
@@ -162,7 +162,9 @@ class TextAnimationItem {
 
     draw(context, timestamp) {
        this.get_atts_at_time(this.textatts, timestamp);
-       this.textatts.draw(context);
+       if (this.textatts != null) {
+        this.textatts.draw(context);
+       }
     }
 }
 
@@ -716,7 +718,6 @@ class ReplayState {
         this.last_timestamp = timestamp;
         this.animation_timestamp += delta * this.speed;
         if (this.break_points != null && this.break_points.length > this.section_index) {
-            //console.log(section_index, break_points[section_index], animation_timestamp);
             if (this.animation_timestamp >= this.break_points[this.section_index]) {
                 this.speed = 1;
                 this.section_index++;
@@ -726,7 +727,6 @@ class ReplayState {
     }
     keyboard_event(event) {
         console.log(event);
-        console.log(this);
         if (event.code === "BracketRight") {
             this.speed += event.shiftKey ? 1 : 0.1;
         } else if (event.code === "BracketLeft") {
@@ -746,6 +746,21 @@ class ReplayState {
                     this.fast_forward_speed = 20;
                 }
                 this.speed = this.fast_forward_speed;
+            }
+            event.preventDefault();
+        } else if (event.code === "ArrowRight") {
+            if (this.break_points != null && this.section_index < this.break_points.length) {
+                this.animation_timestamp = this.break_points[this.section_index];
+            }
+            event.preventDefault();
+        } else if (event.code === "ArrowLeft") {
+            if (this.break_points != null && this.section_index > 0) {
+                var recent_break_point = this.break_points[this.section_index - 1];
+                if (this.animation_timestamp - recent_break_point < 500) {
+                    this.section_index -= 1;
+                }
+                this.section_index = Math.max(0, this.section_index);
+                this.animation_timestamp = this.section_index > 0 ? this.break_points[this.section_index - 1] : 0;
             }
             event.preventDefault();
         }
