@@ -52,6 +52,20 @@ class TextAnimationItem {
         this.add_animation(timer, ta);
     }
 
+    is_static_at_time(timestamp) {
+        var current_animation_phase = null;
+        for (var i = 0; i < this.animations.length; i++) {
+            var anim = this.animations[i];
+            if (anim.start_time <= timestamp && anim.end_time >= timestamp) {
+                return false;
+            }
+            if (anim.start_time > timestamp) {
+                return true;
+            }
+        }
+        return true;
+    }
+
     clone(transformer=null, profile=new AnimationProfile("cheeky", 0.3)) {
         var ta = this.latest_text_atts();
         if (transformer) {
@@ -720,14 +734,27 @@ function fly_and_rotate_text(dest_x, dest_y, characters, timer) {
 }
 
 class ReplayState {
-    constructor(break_points) {
+    constructor(num_animels, break_points) {
         this.speed = 1.0;
         this.last_timestamp = null;
         this.animation_timestamp = 0;
         this.paused = false;
+        this.fast_forwarding = false;
         this.fast_forward_speed = 1.0;
         this.section_index = 0;
         this.break_points = break_points;
+        this.cached = new Array(num_animels).fill(false);
+
+        var canvas = document.getElementById('canvas');
+        this.ctx = canvas.getContext('2d');
+        this.offscreenCanvas = document.createElement('canvas');
+        this.offscreenCanvas.width = canvas.width;
+        this.offscreenCanvas.height = canvas.height;
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+    }
+    blow_cache() {
+        this.cached.fill(false);
+        this.offscreenCtx.clearRect(0, 0, canvas.scrollWidth, canvas.scrollHeight);
     }
     get_animation_time(timestamp) {
         var delta = this.paused ? 0 : timestamp - this.last_timestamp;
@@ -735,7 +762,10 @@ class ReplayState {
         this.animation_timestamp += delta * this.speed;
         if (this.break_points != null && this.break_points.length > this.section_index) {
             if (this.animation_timestamp >= this.break_points[this.section_index]) {
-                this.speed = 1;
+                if (this.fast_forwarding) { 
+                    this.speed = 1;
+                    this.fast_forwarding = false;
+                }
                 this.section_index++;
             }
         }
@@ -754,19 +784,22 @@ class ReplayState {
             this.paused = !this.paused;
             event.preventDefault();
         } else if (event.code === "Enter") {
-            if (this.speed > 1) {
+            if (this.fast_forwarding) {
                 this.fast_forward_speed = this.speed;
                 this.speed = 1;
+                this.fast_forwarding = false;
             } else {
                 if (this.fast_forward_speed <= 1) {
                     this.fast_forward_speed = 20;
                 }
                 this.speed = this.fast_forward_speed;
+                this.fast_forwarding = true;
             }
             event.preventDefault();
         } else if (event.code === "ArrowRight") {
             if (this.break_points != null && this.section_index < this.break_points.length) {
                 this.animation_timestamp = this.break_points[this.section_index];
+                this.blow_cache();
             }
             event.preventDefault();
         } else if (event.code === "ArrowLeft") {
@@ -777,6 +810,7 @@ class ReplayState {
                 }
                 this.section_index = Math.max(0, this.section_index);
                 this.animation_timestamp = this.section_index > 0 ? this.break_points[this.section_index - 1] : 0;
+                this.blow_cache();
             }
             event.preventDefault();
         }
@@ -784,21 +818,45 @@ class ReplayState {
 }
 
 function start_animation(animels, break_points) {
-    var replay_state = new ReplayState(break_points);
+    var replay_state = new ReplayState(animels.length, break_points);
     window.addEventListener("keydown", function(event) { replay_state.keyboard_event(event); });
     window.requestAnimationFrame(function(timestamp) { draw(animels, timestamp, replay_state); });
 }
 
 function draw(animation_items, timestamp, replay_state) {
     timestamp = replay_state.get_animation_time(timestamp);
-    var canvas = document.getElementById('canvas');
-    var ctx = canvas.getContext('2d');
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.clearRect(0, 0, canvas.scrollWidth, canvas.scrollHeight);
+    //var canvas = document.getElementById('canvas');
+    //var ctx = canvas.getContext('2d');
+    replay_state.ctx.globalCompositeOperation = 'destination-over';
+    replay_state.ctx.clearRect(0, 0, canvas.scrollWidth, canvas.scrollHeight);
 
+    var use_cache = true;
     for (var i = 0; i < animation_items.length; i++) {
-        anim = animation_items[i];
-        anim.draw(ctx, timestamp);
+        var anim = animation_items[i];
+        var was_static = replay_state.cached[i];
+        var is_static = anim.is_static_at_time(timestamp);
+        if (was_static == is_static) {
+            continue;
+        } else if (is_static) {
+            // Add to cache
+            anim.draw(replay_state.offscreenCtx, timestamp);
+            replay_state.cached[i] = true;
+        } else {
+            // Invalidate cache
+            replay_state.blow_cache();
+            use_cache = false;
+            break;
+        }
+    }
+    if (use_cache) {
+        replay_state.ctx.globalAlpha = 1.0;
+        replay_state.ctx.drawImage(replay_state.offscreenCanvas, 0, 0);
+    }
+    for (var i = 0; i < animation_items.length; i++) {
+        var anim = animation_items[i];
+        if (!replay_state.cached[i]) {
+            anim.draw(replay_state.ctx, timestamp);
+        }
     }
 
     window.requestAnimationFrame(function(timestamp) { draw(animation_items, timestamp, replay_state); });
