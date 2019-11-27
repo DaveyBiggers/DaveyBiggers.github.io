@@ -187,6 +187,20 @@ function hexToRgb(hex) {
 }
 
 function interpolate_colours(colA, colB, alpha) {
+    // Slowest bit of code...
+    // We can remove the string conversion stuff entirely by
+    // only storing RGB values, but for now just make sure we
+    // don't do unnecessary work.
+    // The following checks will actually remove most cases!
+    if (alpha < 0.00001) {
+        return colA;
+    } else if (alpha > 0.99999) {
+        return colB;
+    }
+    if (colA === colB) {
+        return colA;
+    }
+
     var a = hexToRgb(colA);
     var b = hexToRgb(colB);
     var rcol = a.r + (b.r - a.r) * alpha;
@@ -215,13 +229,15 @@ class TextAttributes {
         ctx.fillStyle = this.colour;
         ctx.globalAlpha = this.opacity;
         ctx.textAlign = this.alignment;
-        ctx.save();
-        ctx.translate(this.x, this.y);
         if (this.rot != 0) {
+            ctx.save();
+            ctx.translate(Math.floor(this.x), Math.floor(this.y));
             ctx.rotate(-this.rot * (Math.PI / 180));
+            ctx.fillText(this.txt, 0, 0);
+            ctx.restore();
+        } else {
+            ctx.fillText(this.txt, Math.floor(this.x), Math.floor(this.y));
         }
-        ctx.fillText(this.txt, 0, 0);
-        ctx.restore();
     }
     interpolate(ta, tb, alpha, colour_alpha) {
         this.x = ta.x + (tb.x - ta.x) * alpha;
