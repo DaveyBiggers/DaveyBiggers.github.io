@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "sourceMap": true,
+    "target": "es2017",
+    "alwaysStrict": true,
+    "noImplicitAny": true,
+    "outDir": "out",
+    "module": "CommonJS"
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}
