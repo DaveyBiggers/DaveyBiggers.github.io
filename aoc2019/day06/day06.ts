@@ -13,6 +13,12 @@ class OrbitNode {
     level: number;
     name: string;
 
+    angular_velocity: number;
+    orbit_radius: number;
+    angle: number;
+    x: number;
+    y: number;
+
     constructor(name: string, parent: OrbitNode)
     {
         this.name = name;
@@ -20,6 +26,35 @@ class OrbitNode {
         if (parent)
         {
             this.set_parent(parent);
+        }
+
+        this.angular_velocity = Math.random() - 0.5;
+        this.angle = Math.random() * Math.PI * 2.0;
+        this.orbit_radius = Math.random() * 5;
+    }
+
+    draw(ctx: CanvasRenderingContext2D)
+    {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 2, 0, 2 * Math.PI, false);
+        ctx.fillStyle = 'green';
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#003300';
+        ctx.stroke();
+    }
+
+    update_position()
+    {
+        this.angle += this.angular_velocity;
+        if (this.parent)
+        {
+            this.x = this.parent.x + Math.cos(this.angle) * this.orbit_radius;
+            this.y = this.parent.y + Math.sin(this.angle) * this.orbit_radius;
+        }
+        for (let child of this.children)
+        {
+            child.update_position();
         }
     }
 
@@ -132,4 +167,17 @@ export default function run(data: string)
     }
     console.log(index, "parts in common");
     console.log((san_length - index) + (you_length - index));
+
+
+    const canvas = <HTMLCanvasElement>document.getElementById('canvas');
+    let ctx = canvas.getContext('2d');
+
+    function draw_step()
+    {
+        com.update_position();
+        com.draw(ctx);
+        window.requestAnimationFrame(() => draw_step());
+    }
+
+    window.requestAnimationFrame(() => draw_step());
 }
